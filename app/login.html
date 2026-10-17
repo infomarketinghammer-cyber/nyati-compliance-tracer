@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Compliance Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap">
+<style>
+:root{ --bg:#f3f5f7; --surface:#fff; --border:#d8dee4; --text:#192230; --muted:#5b6676; --accent:#2b4a73; --accent-ink:#fff; --bad:#b3261e; --bad-bg:#fbe7e5; }
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#11161c; --surface:#171d25; --border:#2b3440; --text:#e7ebef; --muted:#99a4b2; --accent:#7ca3d6; --accent-ink:#0d1117; --bad:#f08b85; --bad-bg:#3a1c1a; }
+}
+*{box-sizing:border-box;}
+body{margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px;
+  background:var(--bg); color:var(--text); font-family:'Public Sans',system-ui,sans-serif;}
+.card{width:100%; max-width:380px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px 24px;}
+.brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; margin-bottom:20px;}
+.brand img{height:34px; width:auto;}
+label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin:14px 0 5px;}
+input{width:100%; padding:10px 12px; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:8px;}
+input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+button{width:100%; margin-top:20px; padding:11px; font:inherit; font-weight:600; border:0; border-radius:8px; background:var(--accent); color:var(--accent-ink); cursor:pointer;}
+button:disabled{opacity:.6; cursor:default;}
+.err{display:none; margin-top:14px; padding:9px 12px; border-radius:8px; font-size:13px; color:var(--bad); background:var(--bad-bg);}
+</style>
+</head>
+<body>
+<form class="card" id="f">
+  <div class="brand"><img src="images/nyati%20logo.avif" alt="Nyati">Compliance Tracker</div>
+  <label for="email">Email</label>
+  <input id="email" type="email" autocomplete="username" required autofocus>
+  <label for="pw">Password</label>
+  <input id="pw" type="password" autocomplete="current-password" required>
+  <div class="err" id="err" role="alert"></div>
+  <button id="go" type="submit">Sign in</button>
+</form>
+<script>
+document.getElementById('f').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const err = document.getElementById('err'), go = document.getElementById('go');
+  err.style.display = 'none'; go.disabled = true;
+  try{
+    const r = await fetch('/auth/login', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email: document.getElementById('email').value, password: document.getElementById('pw').value})});
+    if(r.ok){ location.href = '/'; return; }
+    const j = await r.json().catch(()=>({}));
+    err.textContent = j.error || 'Sign-in failed.';
+  }catch(x){ err.textContent = 'Could not reach the server.'; }
+  err.style.display = 'block'; go.disabled = false;
+});
+</script>
+</body>
+</html>

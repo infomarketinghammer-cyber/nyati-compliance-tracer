@@ -33,6 +33,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box;}
+[hidden]{display:none !important;}
 html,body{margin:0;height:100%;}
 body{
   font-family:var(--font-body); background:var(--bg); color:var(--text);
@@ -205,16 +206,13 @@ table.register tr:hover td{background:var(--surface-2); cursor:pointer;}
       <button class="tab" data-view="register">Register</button>
       <button class="tab" data-view="projects">Projects</button>
       <button class="tab" data-view="dq">Data Quality</button>
+      <button class="tab" data-view="users" id="usersTab" hidden>Users</button>
     </div>
     <div class="topbar-right">
       <select class="pill" id="projectSelect"></select>
-      <select class="pill" id="roleSelect">
-        <option value="admin">Role: Admin</option>
-        <option value="head">Role: Compliance Head</option>
-        <option value="owner">Role: Owner</option>
-        <option value="approver">Role: Approver</option>
-        <option value="readonly">Role: Read-only</option>
-      </select>
+      <span class="pill" id="userChip" style="cursor:default;"></span>
+      <button class="pill" id="pwBtn" type="button">Password</button>
+      <button class="pill" id="logoutBtn" type="button">Sign out</button>
     </div>
   </div>
   <main id="main"></main>
@@ -233,12 +231,12 @@ const S = {
   projects: {},        // id -> {name, rera_no, current_stage, notes}
   stageOverrides: {},  // compliance_id -> stage_id
   currentProject: 'ENTITY',
-  role: 'admin',
+  role: 'readonly',   // set from the signed-in user at boot; the server enforces it too
   view: 'dashboard',
   calMonth: new Date(),
   registerCols: ['compliance_id','department','level','brief_description','authority_norm','frequency_norm','owner','status'],
 };
-let db=null, downloads=null, userCap=null, meProfile=null;
+let db=null;
 
 const STATUS_DEFS = {
   'Not Started':   {cls:'neutral', ic:'○'},
@@ -287,60 +285,21 @@ function effectiveStageId(item){
   return S.stageOverrides[item.compliance_id] || item.stage_id;
 }
 
-/* ============================= LOCAL STORAGE DB ============================= */
-// Minimal stand-in for the artifact `db` capability, backed by localStorage.
-function makeLocalDb(){
-  const KEY = 'compliance-tracker-db-v1';
-  const load = ()=>{ try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){ return {}; } };
-  const save = data=>{ localStorage.setItem(KEY, JSON.stringify(data)); };
-  const subs = [];
-  const notify = ()=>subs.slice().forEach(fn=>fn());
-  window.addEventListener('storage', e=>{ if(e.key===KEY) notify(); });
+/* ============================= API DB ============================= */
+// Talks to server/server.js (which stores data in MongoDB). Polls so other users' changes appear.
+let ME = null;   // {email, name, role} of the signed-in user
 
-  function query(name, filters, order, lim){
-    return {
-      where(f, op, v){ return query(name, filters.concat([[f,v]]), order, lim); },
-      orderBy(f, dir){ return query(name, filters, [f, dir||'asc'], lim); },
-      limit(n){ return query(name, filters, order, n); },
-      onSnapshot(cb){
-        const run = ()=>{
-          const col = load()[name] || {};
-          let docs = Object.keys(col).map(id=>({id, data:()=>col[id]}));
-          filters.forEach(([f,v])=>{ docs = docs.filter(d=>d.data()[f]===v); });
-          if(order){
-            const [f,dir]=order, m = dir==='desc' ? -1 : 1;
-            docs.sort((a,b)=>{ const x=a.data()[f], y=b.data()[f]; return x<y ? -m : x>y ? m : 0; });
-          }
-          if(lim) docs = docs.slice(0, lim);
-          cb({docs});
-        };
-        subs.push(run); run();
-        return ()=>{ const i=subs.indexOf(run); if(i>=0) subs.splice(i,1); };
-      }
-    };
-  }
-  return {
-    collection(name){
-      const q = query(name, [], null, null);
-      q.add = async data=>{
-        const all = load(); const id = 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
-        (all[name] = all[name] || {})[id] = data; save(all); notify();
-      };
-      return q;
-    },
-    doc(path){
-      const [name, ...rest] = path.split('/'); const id = rest.join('/');
-      return { async set(data){ const all = load(); (all[name] = all[name] || {})[id] = data; save(all); notify(); } };
-    }
-  };
+async function api(method, url, body){
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: method==='GET' ? undefined : JSON.stringify(body||{})});
+  if(r.status===401){ location.href = '/login.html'; throw new Error('not signed in'); }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ const e = new Error(j.error || ('HTTP '+r.status)); e.status = r.status; throw e; }
+  return j;
 }
 
-// db backed by the Node/MongoDB server (server/server.js). Polls for changes from other users.
 function makeApiDb(){
   const subs = [];
   const notify = ()=>subs.slice().forEach(fn=>fn());
-  const send = (method, url, body)=>fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
-    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
   setInterval(notify, 5000);
 
   function query(name, params){
@@ -351,8 +310,7 @@ function makeApiDb(){
       limit(n){ return mk({limit:n}); },
       onSnapshot(cb, errCb){
         let alive = true, last = null;
-        const run = ()=>fetch('/api/'+name+'?'+new URLSearchParams(params))
-          .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        const run = ()=>api('GET', '/api/'+name+'?'+new URLSearchParams(params))
           .then(rows=>{
             // Only notify on real changes: each callback re-renders the page, which would wipe half-typed forms.
             const sig = JSON.stringify(rows);
@@ -369,56 +327,26 @@ function makeApiDb(){
   return {
     collection(name){
       const q = query(name, {});
-      q.add = async data=>{ await send('POST', '/api/'+name, data); notify(); };
+      q.add = async data=>{ await api('POST', '/api/'+name, data); notify(); };
       return q;
     },
     doc(path){
       const [name, ...rest] = path.split('/');
-      return { async set(data){ await send('PUT', '/api/'+name+'/'+encodeURIComponent(rest.join('/')), data); notify(); } };
+      return { async set(data){ await api('PUT', '/api/'+name+'/'+encodeURIComponent(rest.join('/')), data); notify(); } };
     }
   };
 }
 
-// True when the page is served by server/server.js and MongoDB is reachable.
-async function apiAvailable(){
-  try{ const r = await fetch('/api/projects'); return r.ok; }catch(e){ return false; }
-}
-
-// One-time: copy anything saved earlier in this browser's localStorage into MongoDB.
-async function migrateLocalToApi(){
-  const KEY = 'compliance-tracker-db-v1';
-  try{
-    const raw = localStorage.getItem(KEY);
-    if(!raw) return;
-    const r = await fetch('/import-all', {method:'POST', headers:{'Content-Type':'application/json'}, body:raw});
-    if(!r.ok) return;
-    localStorage.setItem(KEY+'-migrated', raw);
-    localStorage.removeItem(KEY);
-    const n = Object.values((await r.json()).inserted||{}).reduce((a,b)=>a+b,0);
-    if(n) toast('Moved '+n+' saved records to MongoDB.');
-  }catch(e){ console.warn('migration failed', e); }
+function download(filename, text, mime){
+  const url = URL.createObjectURL(new Blob([text], {type: mime}));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
 /* ============================= DB WIRING ============================= */
 async function initCapabilities(){
-  try{
-    if(window.claude && window.claude.use){
-      db = await window.claude.use('db');
-      downloads = await window.claude.use('downloads');
-      userCap = await window.claude.use('user');
-      if(userCap){ try{ meProfile = await userCap.me(); }catch(e){} }
-    }
-  }catch(e){ console.warn('capability init failed', e); }
-
-  if(!db && await apiAvailable()){
-    await migrateLocalToApi();
-    db = makeApiDb();
-  }
-  if(!db){
-    db = makeLocalDb();
-    document.getElementById('main').insertAdjacentHTML('afterbegin',
-      '<div class="readonly-note">Shared storage unavailable — data is saved in this browser\'s local storage only.</div>');
-  }
+  db = makeApiDb();
 
   // Subscribe to shared collections.
   db.collection('tracking').onSnapshot(snap=>{
@@ -454,7 +382,7 @@ async function saveTracking(item, projectId, patch){
   if(!db){ toast('Not saved — storage unavailable in this preview.'); return; }
   const key = trackingKey(item, projectId);
   const prev = getTracking(item, projectId);
-  const who = (document.getElementById('whoInput') && document.getElementById('whoInput').value) || (meProfile && meProfile.name) || 'Unknown user';
+  const who = ME.name; // the server also stamps this; the browser can't set it
   const next = {...prev, ...patch, last_updated_by: who, updated_at: new Date().toISOString()};
   try{
     await db.doc('tracking/'+key).set(next);
@@ -468,7 +396,7 @@ async function saveTracking(item, projectId, patch){
     toast('Saved.');
   }catch(e){
     console.warn(e);
-    toast('Save failed: '+(e && e.code || 'error'));
+    toast('Save failed: '+(e && e.message || 'error'));
   }
 }
 
@@ -480,17 +408,17 @@ async function saveProject(id, data){
     populateProjectSelect();
     toast('Project saved.');
     render();
-  }catch(e){ toast('Save failed.'); }
+  }catch(e){ toast('Save failed: '+(e&&e.message||'error')); }
 }
 
 async function saveStageOverride(complianceId, stageId){
   if(!db){ toast('Not saved — storage unavailable in this preview.'); return; }
   try{
-    await db.doc('stage_overrides/'+complianceId).set({stage_id: stageId, set_by: (meProfile&&meProfile.name)||'admin', at:new Date().toISOString()});
+    await db.doc('stage_overrides/'+complianceId).set({stage_id: stageId, set_by: ME.name, at:new Date().toISOString()});
     S.stageOverrides[complianceId]=stageId;
     toast('Stage mapping updated.');
     render();
-  }catch(e){ toast('Save failed.'); }
+  }catch(e){ toast('Save failed: '+(e&&e.message||'error')); }
 }
 
 /* ============================= ROLE / PROJECT ============================= */
@@ -508,6 +436,7 @@ function populateProjectSelect(){
 /* ============================= RENDER ROUTER ============================= */
 function switchView(v){
   S.view = v;
+  if(v==='users' && !S.users) loadUsers();
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===v));
   render();
 }
@@ -523,6 +452,7 @@ function render(){
     case 'register': html = renderRegister(); break;
     case 'projects': html = renderProjects(); break;
     case 'dq': html = renderDQ(); break;
+    case 'users': html = renderUsers(); break;
   }
   main.innerHTML = html;
   attachViewHandlers();
@@ -896,7 +826,7 @@ function openDrawer(complianceId){
       <div class="field"><label>Next due date</label><input type="date" id="nextDueInput" value="${tr.next_due_date||''}" ${editable?'':'disabled'}></div>
       <div class="field"><label>Remarks</label><textarea id="remarksInput" rows="2" ${editable?'':'disabled'}>${esc(tr.remarks||'')}</textarea></div>
       <div class="field"><label>Evidence / document link</label><input type="text" id="evidenceInput" value="${esc(tr.evidence_link||'')}" placeholder="https://…" ${editable?'':'disabled'}></div>
-      <div class="field"><label>Updated by</label><input type="text" id="whoInput" value="${esc(tr.last_updated_by || (meProfile&&meProfile.name) || '')}" placeholder="Your name" ${editable?'':'disabled'}></div>
+      <div class="field"><label>Updated by</label><input type="text" id="whoInput" value="${esc(tr.last_updated_by || '')}" placeholder="Set automatically when you save" disabled></div>
       <button class="btn primary" id="saveTrackingBtn" ${editable?'':'disabled'}>Save status</button>
       ${tr.updated_at?`<div style="font-size:11px;color:var(--text-muted); margin-top:6px;">Last updated ${new Date(tr.updated_at).toLocaleString()}</div>`:''}
     </div>
@@ -950,8 +880,7 @@ function attachViewHandlers(){
     document.getElementById('calToday').onclick = ()=>{ S.calMonth = new Date(); render(); };
     document.getElementById('icsExport').onclick = async ()=>{
       const ics = buildICS();
-      if(downloads){ try{ await downloads.save({filename:'compliance-calendar.ics', data: ics}); }catch(e){ toast('Download was not completed.'); } }
-      else toast('Downloads are unavailable in this preview context.');
+      download('compliance-calendar.ics', ics, 'text/calendar');
     };
   }
   if(S.view==='register'){
@@ -970,10 +899,10 @@ function attachViewHandlers(){
         const v = String(regRowValue(it,c)||'').replace(/"/g,'""');
         return `"${v}"`;
       }).join(','))).join('\r\n');
-      if(downloads){ try{ await downloads.save({filename:'compliance-register.csv', data: csv}); }catch(e){ toast('Download was not completed.'); } }
-      else toast('Downloads are unavailable in this preview context.');
+      download('compliance-register.csv', '﻿'+csv, 'text/csv;charset=utf-8');
     };
   }
+  if(S.view==='users') attachUserHandlers();
   if(S.view==='projects'){
     const btn = document.getElementById('npSave');
     if(btn) btn.onclick = ()=>{
@@ -985,13 +914,104 @@ function attachViewHandlers(){
   }
 }
 
+/* ============================= USERS (admin) ============================= */
+const ROLE_LABELS = {admin:'Admin', head:'Compliance Head', owner:'Owner', approver:'Approver', readonly:'Read-only'};
+
+async function loadUsers(){
+  try{ S.users = await api('GET', '/auth/users'); }catch(e){ S.users = []; toast(e.message); }
+  if(S.view==='users') render();
+}
+
+function renderUsers(){
+  if(!S.users) return '<div class="empty-state">Loading users…</div>';
+  const roleOpts = sel=>Object.entries(ROLE_LABELS).map(([k,v])=>`<option value="${k}" ${k===sel?'selected':''}>${v}</option>`).join('');
+  return `
+    <div class="section-title">Users</div>
+    <div class="card" style="margin-bottom:18px;">
+      <table class="simple"><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr>
+      ${S.users.map(u=>`<tr>
+        <td>${esc(u.name)}</td><td class="mono">${esc(u.email)}</td>
+        <td><select data-urole="${esc(u.email)}" ${u.email===ME.email?'disabled':''}>${roleOpts(u.role)}</select></td>
+        <td>${u.active?'Active':'<span style="color:var(--bad)">Disabled</span>'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn" data-upw="${esc(u.email)}">Reset password</button>
+          ${u.email===ME.email?'':`<button class="btn" data-uactive="${esc(u.email)}" data-to="${u.active?0:1}">${u.active?'Disable':'Enable'}</button>`}
+        </td></tr>`).join('')}
+      </table>
+    </div>
+    <div class="section-title">Add user</div>
+    <div class="card">
+      <div class="field"><label>Name</label><input id="nuName"></div>
+      <div class="field"><label>Email</label><input id="nuEmail" type="email" autocomplete="off"></div>
+      <div class="field"><label>Role</label><select id="nuRole">${roleOpts('readonly')}</select></div>
+      <div class="field"><label>Temporary password (min 10 characters)</label><input id="nuPw" type="text" autocomplete="off"></div>
+      <button class="btn primary" id="nuSave">Add user</button>
+    </div>`;
+}
+
+function attachUserHandlers(){
+  document.querySelectorAll('[data-urole]').forEach(el=>el.addEventListener('change', async ()=>{
+    try{ await api('PUT', '/auth/users/'+encodeURIComponent(el.dataset.urole), {role: el.value}); toast('Role updated.'); }
+    catch(e){ toast(e.message); }
+    loadUsers();
+  }));
+  document.querySelectorAll('[data-uactive]').forEach(el=>el.addEventListener('click', async ()=>{
+    try{ await api('PUT', '/auth/users/'+encodeURIComponent(el.dataset.uactive), {active: el.dataset.to==='1'}); toast('Updated.'); }
+    catch(e){ toast(e.message); }
+    loadUsers();
+  }));
+  document.querySelectorAll('[data-upw]').forEach(el=>el.addEventListener('click', async ()=>{
+    const pw = window.prompt('New temporary password for '+el.dataset.upw+' (min 10 characters):');
+    if(!pw) return;
+    try{ await api('PUT', '/auth/users/'+encodeURIComponent(el.dataset.upw), {password: pw}); toast('Password reset. They are signed out everywhere.'); }
+    catch(e){ toast(e.message); }
+  }));
+  const save = document.getElementById('nuSave');
+  if(save) save.onclick = async ()=>{
+    try{
+      await api('POST', '/auth/users', {
+        name: document.getElementById('nuName').value, email: document.getElementById('nuEmail').value,
+        role: document.getElementById('nuRole').value, password: document.getElementById('nuPw').value});
+      toast('User added.'); S.users = null; render(); loadUsers();
+    }catch(e){ toast(e.message); }
+  };
+}
+
+function openPasswordModal(){
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px;';
+  wrap.innerHTML = `<form class="card" style="width:100%;max-width:340px;">
+    <h3 style="margin-bottom:10px;">Change password</h3>
+    <div class="field"><label>Current password</label><input type="password" id="pwCur" autocomplete="current-password" required></div>
+    <div class="field"><label>New password (min 10 characters)</label><input type="password" id="pwNew" autocomplete="new-password" required minlength="10"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" id="pwCancel">Cancel</button></div>
+  </form>`;
+  document.body.appendChild(wrap);
+  const close = ()=>wrap.remove();
+  wrap.querySelector('#pwCancel').onclick = close;
+  wrap.addEventListener('click', e=>{ if(e.target===wrap) close(); });
+  wrap.querySelector('form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    try{ await api('POST', '/auth/password', {current: wrap.querySelector('#pwCur').value, next: wrap.querySelector('#pwNew').value}); close(); toast('Password changed.'); }
+    catch(err){ toast(err.message); }
+  });
+}
+
 /* ============================= BOOT ============================= */
 document.getElementById('overlay').addEventListener('click', closeDrawer);
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>switchView(t.dataset.view)));
 document.getElementById('projectSelect').addEventListener('change', e=>{ S.currentProject = e.target.value; render(); });
-document.getElementById('roleSelect').addEventListener('change', e=>{ S.role = e.target.value; render(); });
+document.getElementById('pwBtn').addEventListener('click', openPasswordModal);
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  try{ await fetch('/auth/logout', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
+  location.href = '/login.html';
+});
 
 (async function boot(){
+  try{ ME = await api('GET', '/auth/me'); }catch(e){ return; } // 401 already redirected to the login page
+  S.role = ME.role;
+  document.getElementById('userChip').textContent = ME.name+' · '+(ROLE_LABELS[ME.role]||ME.role);
+  document.getElementById('usersTab').hidden = ME.role!=='admin';
   await loadData();
   populateProjectSelect();
   switchView('dashboard');
