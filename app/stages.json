@@ -1,0 +1,47 @@
+[
+ {
+  "id": "S1",
+  "name": "Stage 1 \u2013 Land & Legal Due Diligence",
+  "order": 1
+ },
+ {
+  "id": "S2",
+  "name": "Stage 2 \u2013 Design & Architecture Approval",
+  "order": 2
+ },
+ {
+  "id": "S3",
+  "name": "Stage 3 \u2013 NOCs (Fire / Garden / Water / Drainage / Power)",
+  "order": 3
+ },
+ {
+  "id": "S4",
+  "name": "Stage 4 \u2013 IOD & FSI Sanctions",
+  "order": 4
+ },
+ {
+  "id": "S5",
+  "name": "Stage 5 \u2013 Construction-Stage Checks & TDR",
+  "order": 5
+ },
+ {
+  "id": "S6",
+  "name": "Stage 6 \u2013 Environmental Clearance (CTE/CTO) & Swachh NOC",
+  "order": 6
+ },
+ {
+  "id": "S7",
+  "name": "Stage 7 \u2013 Occupancy & Handover to Sales",
+  "order": 7
+ },
+ {
+  "id": "S8",
+  "name": "Stage 8 \u2013 RERA Registration & Ongoing Project Obligations",
+  "order": 8
+ },
+ {
+  "id": "UNMAPPED",
+  "name": "Unmapped to Stage",
+  "order": 99
+ }
+]

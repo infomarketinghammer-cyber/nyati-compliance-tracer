@@ -1,0 +1,1001 @@
+<meta charset="utf-8">
+<title>Compliance Tracker &amp; Calendar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout concept: fixed top app-bar + left stage/filter rail on desktop, collapsing
+   to a bottom tab bar on phone; content is a single scrollable column of cards. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --surface-2:#eceff2; --border:#d8dee4;
+  --text:#192230; --text-muted:#5b6676; --accent:#2b4a73; --accent-ink:#ffffff;
+  --ok:#1c7a4d; --ok-bg:#e4f5ec; --warn:#9a6b00; --warn-bg:#fdf1d8;
+  --bad:#b3261e; --bad-bg:#fbe7e5; --hold:#5b4b8a; --hold-bg:#ece7f6;
+  --neutral:#5b6676; --neutral-bg:#e9ebee;
+  --font-display:'Public Sans',system-ui,sans-serif; --font-body:'Public Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161c; --surface:#171d25; --surface-2:#1e2630; --border:#2b3440;
+    --text:#e7ebef; --text-muted:#99a4b2; --accent:#7ca3d6; --accent-ink:#0d1117;
+    --ok:#5fd394; --ok-bg:#163428; --warn:#e8b94e; --warn-bg:#3a2e0f;
+    --bad:#f08b85; --bad-bg:#3a1c1a; --hold:#b7a6e6; --hold-bg:#2a2340;
+    --neutral:#99a4b2; --neutral-bg:#232b35;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11161c; --surface:#171d25; --surface-2:#1e2630; --border:#2b3440;
+  --text:#e7ebef; --text-muted:#99a4b2; --accent:#7ca3d6; --accent-ink:#0d1117;
+  --ok:#5fd394; --ok-bg:#163428; --warn:#e8b94e; --warn-bg:#3a2e0f;
+  --bad:#f08b85; --bad-bg:#3a1c1a; --hold:#b7a6e6; --hold-bg:#2a2340;
+  --neutral:#99a4b2; --neutral-bg:#232b35;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{
+  font-family:var(--font-body); background:var(--bg); color:var(--text);
+  padding-left:max(0px, env(safe-area-inset-left,0px)); padding-right:max(0px, env(safe-area-inset-right,0px));
+  font-size:14px; line-height:1.45;
+}
+a{color:var(--accent);}
+h1,h2,h3,h4{font-family:var(--font-display); text-wrap:balance; margin:0;}
+button{font-family:inherit; cursor:pointer;}
+input,select,textarea{font-family:inherit; font-size:13px;}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+
+/* ---------- App shell ---------- */
+#app{display:flex; flex-direction:column; min-height:100vh;}
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:10px max(16px, env(safe-area-inset-left,0px)) 10px max(16px, env(safe-area-inset-left,0px));
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:31;background:var(--surface);}
+.brand{display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; white-space:nowrap;}
+.brand .logo{height:28px; width:auto; display:block; object-fit:contain;}
+.tabs{display:flex; gap:4px; flex-wrap:wrap; flex:1;}
+.tab{
+  padding:7px 12px; border-radius:8px; border:1px solid transparent; background:transparent;
+  color:var(--text-muted); font-size:13px; font-weight:600;
+}
+.tab.active{background:var(--accent); color:var(--accent-ink);}
+.tab:not(.active):hover{background:var(--surface-2); color:var(--text);}
+.topbar-right{display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;}
+select.pill, .pill-btn{
+  padding:6px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2);
+  color:var(--text); font-size:12.5px;
+}
+main{flex:1; padding:18px max(16px, env(safe-area-inset-left,0px)) 40px max(16px, env(safe-area-inset-left,0px)); max-width:1280px; margin:0 auto; width:100%;}
+
+.view{display:none;}
+.view.active{display:block;}
+
+/* ---------- generic components ---------- */
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+.grid{display:grid; gap:14px;}
+.grid-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+.stat-tile{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:4px;}
+.stat-tile .num{font-family:var(--font-mono); font-size:26px; font-weight:700;}
+.stat-tile .label{color:var(--text-muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em;}
+.section-title{font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin:26px 0 10px;}
+.section-title:first-child{margin-top:0;}
+
+.badge{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700; white-space:nowrap;}
+.badge.ok{background:var(--ok-bg); color:var(--ok);}
+.badge.warn{background:var(--warn-bg); color:var(--warn);}
+.badge.bad{background:var(--bad-bg); color:var(--bad);}
+.badge.hold{background:var(--hold-bg); color:var(--hold);}
+.badge.neutral{background:var(--neutral-bg); color:var(--neutral);}
+.badge .ic{font-size:10px;}
+
+.proposed-flag{display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px; background:var(--warn-bg); color:var(--warn); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
+
+/* ---------- Dashboard ---------- */
+.dash-cols{display:grid; grid-template-columns:1.3fr 1fr; gap:16px;}
+@media (max-width:760px){.dash-cols{grid-template-columns:1fr;}}
+.bar-row{display:flex; align-items:center; gap:10px; margin:8px 0;}
+.bar-row .lbl{width:120px; font-size:12px; color:var(--text-muted); flex-shrink:0;}
+.bar-track{flex:1; height:9px; border-radius:5px; background:var(--surface-2); overflow:hidden; display:flex;}
+.bar-seg{height:100%;}
+.bar-row .pct{width:42px; text-align:right; font-family:var(--font-mono); font-size:12px; color:var(--text-muted);}
+table.simple{width:100%; border-collapse:collapse; font-size:12.5px;}
+table.simple th{text-align:left; color:var(--text-muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border); font-size:11px; text-transform:uppercase; letter-spacing:.03em;}
+table.simple td{padding:7px 8px; border-bottom:1px solid var(--border);}
+table.simple tr:last-child td{border-bottom:none;}
+
+/* ---------- Stage view ---------- */
+.stage-block{border:1px solid var(--border); border-radius:12px; margin-bottom:14px; background:var(--surface); overflow:hidden;}
+.stage-head{display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; background:var(--surface);}
+.stage-head:hover{background:var(--surface-2);}
+.stage-head h3{font-size:15px; flex:1; min-width:0;}
+.stage-chevron{transition:transform .15s; color:var(--text-muted);}
+.stage-block.open .stage-chevron{transform:rotate(90deg);}
+.stage-progress{width:120px; flex-shrink:0;}
+.stage-count{font-family:var(--font-mono); font-size:12px; color:var(--text-muted); white-space:nowrap;}
+.stage-items{display:none; border-top:1px solid var(--border);}
+.stage-block.open .stage-items{display:block;}
+.item-row{display:grid; grid-template-columns:90px 1fr 140px 130px 110px 100px; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); font-size:12.5px;}
+.item-row:last-child{border-bottom:none;}
+.item-row:hover{background:var(--surface-2); cursor:pointer;}
+.item-row .idcell{font-family:var(--font-mono); font-weight:700; font-size:12px;}
+.item-row .desc{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.item-row .muted{color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+@media (max-width:860px){
+  .item-row{grid-template-columns:1fr; gap:4px;}
+  .item-row>div::before{content:attr(data-lbl); display:block; font-size:10px; color:var(--text-muted); text-transform:uppercase;}
+}
+.item-row-header{display:grid; grid-template-columns:90px 1fr 140px 130px 110px 100px; gap:10px; padding:8px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); background:var(--surface-2); border-top:1px solid var(--border);}
+@media (max-width:860px){.item-row-header{display:none;}}
+
+/* ---------- Calendar ---------- */
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:10px; overflow:hidden;}
+.cal-dow{background:var(--surface-2); text-align:center; font-size:11px; padding:6px 0; color:var(--text-muted); text-transform:uppercase;}
+.cal-cell{background:var(--surface); min-height:90px; padding:6px; font-size:11px; display:flex; flex-direction:column; gap:3px;}
+.cal-cell.off{background:var(--surface-2); color:var(--text-muted);}
+.cal-cell .dnum{font-family:var(--font-mono); font-size:11px; color:var(--text-muted);}
+.cal-cell.today .dnum{color:var(--accent); font-weight:800;}
+.cal-chip{border-radius:5px; padding:2px 5px; font-size:10.5px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cal-more{font-size:10px; color:var(--text-muted);}
+.undated-panel{margin-top:16px;}
+.undated-chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:8px; padding:6px 10px; margin:3px; font-size:12px; cursor:pointer; background:var(--surface);}
+
+/* ---------- Register table ---------- */
+.register-toolbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center;}
+.register-toolbar input[type=text]{flex:1; min-width:180px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);}
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px;}
+table.register{width:100%; border-collapse:collapse; font-size:12px; min-width:900px;}
+table.register th{position:sticky; top:0; background:var(--surface-2); text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; font-size:10.5px; text-transform:uppercase; color:var(--text-muted);}
+table.register td{padding:7px 10px; border-bottom:1px solid var(--border); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+table.register tr:hover td{background:var(--surface-2); cursor:pointer;}
+.col-chooser{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+.col-chooser label{font-size:11.5px; display:flex; gap:4px; align-items:center; background:var(--surface-2); border-radius:6px; padding:3px 8px;}
+
+/* ---------- Data quality ---------- */
+.dq-group{margin-bottom:18px;}
+.dq-group h3{font-size:14px; margin-bottom:8px;}
+.dq-list{display:flex; flex-direction:column; gap:1px; border:1px solid var(--border); border-radius:10px; overflow:hidden;}
+.dq-item{display:flex; justify-content:space-between; gap:10px; padding:8px 12px; background:var(--surface); font-size:12.5px; cursor:pointer;}
+.dq-item:hover{background:var(--surface-2);}
+
+/* ---------- Drawer ---------- */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; display:none;}
+.overlay.show{display:block;}
+.drawer{
+  position:fixed; top:0; right:0; bottom:0; width:min(480px,100vw); background:var(--surface); z-index:41;
+  transform:translateX(100%); transition:transform .2s ease; overflow-y:auto; border-left:1px solid var(--border);
+  padding:max(16px,env(safe-area-inset-top,16px)) max(16px, env(safe-area-inset-right,0px)) 30px 16px;
+}
+.drawer.show{transform:translateX(0);}
+.drawer-close{position:absolute; top:14px; right:14px; background:var(--surface-2); border:none; border-radius:8px; width:30px; height:30px; font-size:16px; color:var(--text);}
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin-bottom:4px;}
+.field .val{font-size:13px; white-space:pre-wrap;}
+.field textarea, .field input, .field select{width:100%; padding:7px 9px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
+.drawer-section{border-top:1px solid var(--border); margin-top:16px; padding-top:14px;}
+.btn{padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-weight:600; font-size:12.5px;}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+.audit-entry{font-size:11.5px; padding:6px 0; border-bottom:1px solid var(--border); color:var(--text-muted);}
+.audit-entry:last-child{border-bottom:none;}
+.audit-entry b{color:var(--text);}
+
+.empty-state{text-align:center; padding:50px 20px; color:var(--text-muted);}
+.toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:9px 16px; border-radius:8px; font-size:12.5px; z-index:60; opacity:0; transition:opacity .2s;}
+.toast.show{opacity:1;}
+.readonly-note{font-size:11.5px; color:var(--text-muted); background:var(--surface-2); border-radius:8px; padding:8px 10px; margin-bottom:10px;}
+.legend{display:flex; gap:10px; flex-wrap:wrap; font-size:11.5px; color:var(--text-muted); margin:10px 0;}
+.legend span{display:inline-flex; align-items:center; gap:4px;}
+.legend i{width:9px;height:9px;border-radius:50%; display:inline-block;}
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand"><img class="logo" src="images/nyati%20logo.avif" alt="Nyati">Compliance Tracker</div>
+    <div class="tabs" id="tabs">
+      <button class="tab" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="stages">Stages</button>
+      <button class="tab" data-view="calendar">Calendar</button>
+      <button class="tab" data-view="register">Register</button>
+      <button class="tab" data-view="projects">Projects</button>
+      <button class="tab" data-view="dq">Data Quality</button>
+    </div>
+    <div class="topbar-right">
+      <select class="pill" id="projectSelect"></select>
+      <select class="pill" id="roleSelect">
+        <option value="admin">Role: Admin</option>
+        <option value="head">Role: Compliance Head</option>
+        <option value="owner">Role: Owner</option>
+        <option value="approver">Role: Approver</option>
+        <option value="readonly">Role: Read-only</option>
+      </select>
+    </div>
+  </div>
+  <main id="main"></main>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================= STATE ============================= */
+const S = {
+  items: [], stages: [],
+  tracking: {},        // key -> doc data
+  audit: {},           // compliance_id (or key) -> [entries]
+  projects: {},        // id -> {name, rera_no, current_stage, notes}
+  stageOverrides: {},  // compliance_id -> stage_id
+  currentProject: 'ENTITY',
+  role: 'admin',
+  view: 'dashboard',
+  calMonth: new Date(),
+  registerCols: ['compliance_id','department','level','brief_description','authority_norm','frequency_norm','owner','status'],
+};
+let db=null, downloads=null, userCap=null, meProfile=null;
+
+const STATUS_DEFS = {
+  'Not Started':   {cls:'neutral', ic:'○'},
+  'In Progress':   {cls:'warn', ic:'◐'},
+  'Submitted / Under Review': {cls:'hold', ic:'◑'},
+  'Compliant / Completed': {cls:'ok', ic:'✓'},
+  'Overdue':       {cls:'bad', ic:'!'},
+  'Not Applicable':{cls:'neutral', ic:'—'},
+  'On Hold':       {cls:'hold', ic:'❙❙'},
+};
+const STATUS_LIST = Object.keys(STATUS_DEFS);
+
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function todayISO(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function daysUntil(iso){ if(!iso) return null; const d=new Date(iso+'T00:00:00'); const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/86400000); }
+
+/* ============================= DATA LOAD ============================= */
+async function loadData(){
+  const [itemsRes, stagesRes] = await Promise.all([fetch('items.json'), fetch('stages.json')]);
+  S.items = await itemsRes.json();
+  S.stages = await stagesRes.json();
+}
+
+function trackingKey(item, projectId){
+  return item.level === 'Project Level' ? `${item.compliance_id}__${projectId||S.currentProject}` : item.compliance_id;
+}
+function getTracking(item, projectId){
+  const k = trackingKey(item, projectId);
+  return S.tracking[k] || {status:'Not Started', status_date:null, last_updated_by:null, remarks:'', evidence_link:'', next_due_date: item.due_date_parse_value && item.due_date_parse_type==='fixed_date' ? item.due_date_parse_value : null};
+}
+function effectiveStatus(item, projectId){
+  const tr = getTracking(item, projectId);
+  let status = tr.status || 'Not Started';
+  if(status !== 'Compliant / Completed' && status !== 'Not Applicable' && status !== 'On Hold' && tr.next_due_date){
+    const d = daysUntil(tr.next_due_date);
+    if(d !== null && d < 0) status = 'Overdue';
+  }
+  return status;
+}
+function effectiveStageId(item){
+  return S.stageOverrides[item.compliance_id] || item.stage_id;
+}
+
+/* ============================= LOCAL STORAGE DB ============================= */
+// Minimal stand-in for the artifact `db` capability, backed by localStorage.
+function makeLocalDb(){
+  const KEY = 'compliance-tracker-db-v1';
+  const load = ()=>{ try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){ return {}; } };
+  const save = data=>{ localStorage.setItem(KEY, JSON.stringify(data)); };
+  const subs = [];
+  const notify = ()=>subs.slice().forEach(fn=>fn());
+  window.addEventListener('storage', e=>{ if(e.key===KEY) notify(); });
+
+  function query(name, filters, order, lim){
+    return {
+      where(f, op, v){ return query(name, filters.concat([[f,v]]), order, lim); },
+      orderBy(f, dir){ return query(name, filters, [f, dir||'asc'], lim); },
+      limit(n){ return query(name, filters, order, n); },
+      onSnapshot(cb){
+        const run = ()=>{
+          const col = load()[name] || {};
+          let docs = Object.keys(col).map(id=>({id, data:()=>col[id]}));
+          filters.forEach(([f,v])=>{ docs = docs.filter(d=>d.data()[f]===v); });
+          if(order){
+            const [f,dir]=order, m = dir==='desc' ? -1 : 1;
+            docs.sort((a,b)=>{ const x=a.data()[f], y=b.data()[f]; return x<y ? -m : x>y ? m : 0; });
+          }
+          if(lim) docs = docs.slice(0, lim);
+          cb({docs});
+        };
+        subs.push(run); run();
+        return ()=>{ const i=subs.indexOf(run); if(i>=0) subs.splice(i,1); };
+      }
+    };
+  }
+  return {
+    collection(name){
+      const q = query(name, [], null, null);
+      q.add = async data=>{
+        const all = load(); const id = 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+        (all[name] = all[name] || {})[id] = data; save(all); notify();
+      };
+      return q;
+    },
+    doc(path){
+      const [name, ...rest] = path.split('/'); const id = rest.join('/');
+      return { async set(data){ const all = load(); (all[name] = all[name] || {})[id] = data; save(all); notify(); } };
+    }
+  };
+}
+
+// db backed by the Node/MongoDB server (server/server.js). Polls for changes from other users.
+function makeApiDb(){
+  const subs = [];
+  const notify = ()=>subs.slice().forEach(fn=>fn());
+  const send = (method, url, body)=>fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  setInterval(notify, 5000);
+
+  function query(name, params){
+    const mk = p=>query(name, Object.assign({}, params, p));
+    return {
+      where(f, op, v){ return mk({key:v}); },
+      orderBy(f, dir){ return mk({orderBy:f, dir:dir||'asc'}); },
+      limit(n){ return mk({limit:n}); },
+      onSnapshot(cb, errCb){
+        let alive = true, last = null;
+        const run = ()=>fetch('/api/'+name+'?'+new URLSearchParams(params))
+          .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+          .then(rows=>{
+            // Only notify on real changes: each callback re-renders the page, which would wipe half-typed forms.
+            const sig = JSON.stringify(rows);
+            if(!alive || sig === last) return;
+            last = sig;
+            cb({docs: rows.map(r=>({id:r.id, data:()=>r.data}))});
+          })
+          .catch(e=>{ if(alive && errCb) errCb(e); });
+        subs.push(run); run();
+        return ()=>{ alive=false; const i=subs.indexOf(run); if(i>=0) subs.splice(i,1); };
+      }
+    };
+  }
+  return {
+    collection(name){
+      const q = query(name, {});
+      q.add = async data=>{ await send('POST', '/api/'+name, data); notify(); };
+      return q;
+    },
+    doc(path){
+      const [name, ...rest] = path.split('/');
+      return { async set(data){ await send('PUT', '/api/'+name+'/'+encodeURIComponent(rest.join('/')), data); notify(); } };
+    }
+  };
+}
+
+// True when the page is served by server/server.js and MongoDB is reachable.
+async function apiAvailable(){
+  try{ const r = await fetch('/api/projects'); return r.ok; }catch(e){ return false; }
+}
+
+// One-time: copy anything saved earlier in this browser's localStorage into MongoDB.
+async function migrateLocalToApi(){
+  const KEY = 'compliance-tracker-db-v1';
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return;
+    const r = await fetch('/import-all', {method:'POST', headers:{'Content-Type':'application/json'}, body:raw});
+    if(!r.ok) return;
+    localStorage.setItem(KEY+'-migrated', raw);
+    localStorage.removeItem(KEY);
+    const n = Object.values((await r.json()).inserted||{}).reduce((a,b)=>a+b,0);
+    if(n) toast('Moved '+n+' saved records to MongoDB.');
+  }catch(e){ console.warn('migration failed', e); }
+}
+
+/* ============================= DB WIRING ============================= */
+async function initCapabilities(){
+  try{
+    if(window.claude && window.claude.use){
+      db = await window.claude.use('db');
+      downloads = await window.claude.use('downloads');
+      userCap = await window.claude.use('user');
+      if(userCap){ try{ meProfile = await userCap.me(); }catch(e){} }
+    }
+  }catch(e){ console.warn('capability init failed', e); }
+
+  if(!db && await apiAvailable()){
+    await migrateLocalToApi();
+    db = makeApiDb();
+  }
+  if(!db){
+    db = makeLocalDb();
+    document.getElementById('main').insertAdjacentHTML('afterbegin',
+      '<div class="readonly-note">Shared storage unavailable — data is saved in this browser\'s local storage only.</div>');
+  }
+
+  // Subscribe to shared collections.
+  db.collection('tracking').onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ S.tracking[d.id] = d.data(); });
+    render();
+  }, e=>console.warn('tracking sub error', e));
+
+  db.collection('projects').onSnapshot(snap=>{
+    const p={};
+    snap.docs.forEach(d=>{ p[d.id]=d.data(); });
+    S.projects = p;
+    populateProjectSelect();
+    render();
+  }, e=>console.warn('projects sub error', e));
+
+  db.collection('stage_overrides').onSnapshot(snap=>{
+    const o={};
+    snap.docs.forEach(d=>{ o[d.id]=d.data().stage_id; });
+    S.stageOverrides = o;
+    render();
+  }, e=>console.warn('stage_overrides sub error', e));
+}
+
+function subscribeAudit(complianceId, projectId, cb){
+  if(!db) { cb([]); return ()=>{}; }
+  const key = projectId ? `${complianceId}__${projectId}` : complianceId;
+  return db.collection('audit').where('key','==',key).orderBy('at','desc').limit(25).onSnapshot(snap=>{
+    cb(snap.docs.map(d=>d.data()));
+  }, e=>{ console.warn('audit sub', e); cb([]); });
+}
+
+async function saveTracking(item, projectId, patch){
+  if(!db){ toast('Not saved — storage unavailable in this preview.'); return; }
+  const key = trackingKey(item, projectId);
+  const prev = getTracking(item, projectId);
+  const who = (document.getElementById('whoInput') && document.getElementById('whoInput').value) || (meProfile && meProfile.name) || 'Unknown user';
+  const next = {...prev, ...patch, last_updated_by: who, updated_at: new Date().toISOString()};
+  try{
+    await db.doc('tracking/'+key).set(next);
+    if(patch.status && patch.status !== prev.status){
+      await db.collection('audit').add({
+        key, compliance_id: item.compliance_id, project_id: item.level==='Project Level' ? (projectId||S.currentProject) : null,
+        old_status: prev.status || 'Not Started', new_status: patch.status, who, remark: patch.remarks || '', at: new Date().toISOString()
+      });
+    }
+    S.tracking[key] = next;
+    toast('Saved.');
+  }catch(e){
+    console.warn(e);
+    toast('Save failed: '+(e && e.code || 'error'));
+  }
+}
+
+async function saveProject(id, data){
+  if(!db){ toast('Not saved — storage unavailable in this preview.'); return; }
+  try{
+    await db.doc('projects/'+id).set(data);
+    S.projects[id]=data;
+    populateProjectSelect();
+    toast('Project saved.');
+    render();
+  }catch(e){ toast('Save failed.'); }
+}
+
+async function saveStageOverride(complianceId, stageId){
+  if(!db){ toast('Not saved — storage unavailable in this preview.'); return; }
+  try{
+    await db.doc('stage_overrides/'+complianceId).set({stage_id: stageId, set_by: (meProfile&&meProfile.name)||'admin', at:new Date().toISOString()});
+    S.stageOverrides[complianceId]=stageId;
+    toast('Stage mapping updated.');
+    render();
+  }catch(e){ toast('Save failed.'); }
+}
+
+/* ============================= ROLE / PROJECT ============================= */
+function canEditTracking(){ return ['admin','head','owner','approver'].includes(S.role); }
+function canEditMaster(){ return S.role==='admin'; }
+
+function populateProjectSelect(){
+  const sel = document.getElementById('projectSelect');
+  const ids = Object.keys(S.projects);
+  sel.innerHTML = '<option value="ENTITY">Entity-level (company-wide)</option>' +
+    ids.map(id=>`<option value="${esc(id)}">${esc(S.projects[id].name||id)}</option>`).join('');
+  sel.value = S.currentProject;
+}
+
+/* ============================= RENDER ROUTER ============================= */
+function switchView(v){
+  S.view = v;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===v));
+  render();
+}
+
+function render(){
+  const main = document.getElementById('main');
+  let html = '';
+  if(S.items.length===0){ main.innerHTML = '<div class="empty-state">Loading compliance data…</div>'; return; }
+  switch(S.view){
+    case 'dashboard': html = renderDashboard(); break;
+    case 'stages': html = renderStages(); break;
+    case 'calendar': html = renderCalendar(); break;
+    case 'register': html = renderRegister(); break;
+    case 'projects': html = renderProjects(); break;
+    case 'dq': html = renderDQ(); break;
+  }
+  main.innerHTML = html;
+  attachViewHandlers();
+}
+
+/* ============================= DASHBOARD ============================= */
+function visibleItemsForProject(){
+  // Items visible for current tracking context: entity items always, project items only when a real project selected.
+  if(S.currentProject==='ENTITY') return S.items.filter(i=>i.level!=='Project Level');
+  return S.items; // show both, project-level tracked against the selected project
+}
+
+function renderDashboard(){
+  const items = S.items;
+  const counts = {}; STATUS_LIST.forEach(s=>counts[s]=0);
+  let overdue=0, due7=0, due30=0;
+  items.forEach(it=>{
+    const projCtx = it.level==='Project Level' ? S.currentProject : null;
+    const st = effectiveStatus(it, projCtx);
+    counts[st] = (counts[st]||0)+1;
+    if(st==='Overdue') overdue++;
+    const tr = getTracking(it, projCtx);
+    if(tr.next_due_date && st!=='Compliant / Completed' && st!=='Not Applicable'){
+      const d = daysUntil(tr.next_due_date);
+      if(d!==null && d>=0 && d<=7) due7++;
+      if(d!==null && d>=0 && d<=30) due30++;
+    }
+  });
+  const total = items.length;
+  const completed = counts['Compliant / Completed']||0;
+
+  function pctBar(label, done, total, extra, color){
+    const raw = total? done/total*100 : 0;
+    const pct = raw.toFixed(2);
+    // Keep a visible sliver for non-zero counts so a single item doesn't look empty.
+    const width = done>0 ? Math.max(raw, 1.5) : 0;
+    const countTxt = extra ? ` <span style="color:var(--text-muted)">(${done})</span>` : '';
+    return `<div class="bar-row"><div class="lbl" title="${esc(label)}">${esc(label)}</div>
+      <div class="bar-track"><div class="bar-seg" style="width:${width}%; background:${color||'var(--accent)'}"></div></div>
+      <div class="pct">${pct}%${countTxt}</div></div>`;
+  }
+
+  const byDept = {};
+  items.forEach(it=>{ byDept[it.department]=byDept[it.department]||{done:0,total:0}; byDept[it.department].total++;
+    const projCtx = it.level==='Project Level' ? S.currentProject : null;
+    if(effectiveStatus(it,projCtx)==='Compliant / Completed') byDept[it.department].done++; });
+
+  const byStage = {};
+  S.stages.forEach(s=>byStage[s.id]={done:0,total:0,name:s.name});
+  items.forEach(it=>{
+    const sid = effectiveStageId(it);
+    byStage[sid] = byStage[sid] || {done:0,total:0,name:'Unmapped to Stage'};
+    byStage[sid].total++;
+    const projCtx = it.level==='Project Level' ? S.currentProject : null;
+    if(effectiveStatus(it,projCtx)==='Compliant / Completed') byStage[sid].done++;
+  });
+
+  const topOverdue = items.map(it=>{
+    const projCtx = it.level==='Project Level' ? S.currentProject : null;
+    const tr = getTracking(it, projCtx);
+    const st = effectiveStatus(it, projCtx);
+    return {it, tr, st, d: tr.next_due_date?daysUntil(tr.next_due_date):null};
+  }).filter(x=>x.st==='Overdue').sort((a,b)=>(a.d??0)-(b.d??0)).slice(0,8);
+
+  return `
+    <div class="section-title">Overview — ${S.currentProject==='ENTITY'?'Entity-level':esc((S.projects[S.currentProject]&&S.projects[S.currentProject].name)||S.currentProject)}</div>
+    <div class="grid grid-stats" style="margin-bottom:22px;">
+      <div class="stat-tile"><div class="num">${total}</div><div class="label">Total compliance items</div></div>
+      <div class="stat-tile"><div class="num" style="color:var(--ok)">${completed}</div><div class="label">Compliant / completed</div></div>
+      <div class="stat-tile"><div class="num" style="color:var(--bad)">${overdue}</div><div class="label">Overdue</div></div>
+      <div class="stat-tile"><div class="num" style="color:var(--warn)">${due7}</div><div class="label">Due in 7 days</div></div>
+      <div class="stat-tile"><div class="num" style="color:var(--warn)">${due30}</div><div class="label">Due in 30 days</div></div>
+    </div>
+
+    <div class="dash-cols">
+      <div class="card">
+        <h3 style="margin-bottom:10px;">By status</h3>
+        ${STATUS_LIST.map(s=>pctBar(s, counts[s]||0, total, true, STATUS_DEFS[s]?`var(--${STATUS_DEFS[s].cls})`:null)).join('')}
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px;">Top overdue items</h3>
+        ${topOverdue.length? `<table class="simple"><tr><th>ID</th><th>Description</th><th>Days overdue</th></tr>${
+          topOverdue.map(x=>`<tr data-open="${esc(x.it.compliance_id)}"><td class="mono">${esc(x.it.compliance_id)}</td><td>${esc((x.it.brief_description||'').slice(0,46))}</td><td class="mono" style="color:var(--bad)">${Math.abs(x.d)}</td></tr>`).join('')
+        }</table>` : '<div style="color:var(--text-muted); font-size:12.5px;">No overdue items right now.</div>'}
+      </div>
+    </div>
+
+    <div class="section-title">Completion % by stage</div>
+    <div class="card">
+      ${Object.keys(byStage).map(sid=>pctBar(byStage[sid].name, byStage[sid].done, byStage[sid].total)).join('')}
+    </div>
+
+    <div class="section-title">Completion % by department</div>
+    <div class="card">
+      ${Object.keys(byDept).map(d=>pctBar(d, byDept[d].done, byDept[d].total)).join('')}
+    </div>
+  `;
+}
+
+/* ============================= STAGES ============================= */
+function renderStages(){
+  const grouped = {};
+  S.stages.forEach(s=>grouped[s.id]={stage:s, items:[]});
+  S.items.forEach(it=>{
+    const sid = effectiveStageId(it);
+    if(!grouped[sid]) grouped[sid]={stage:{id:sid,name:sid,order:999}, items:[]};
+    grouped[sid].items.push(it);
+  });
+  const ordered = Object.values(grouped).sort((a,b)=>a.stage.order-b.stage.order);
+
+  return `
+    <div class="legend">
+      ${Object.entries(STATUS_DEFS).map(([k,v])=>`<span><i style="background:var(--${v.cls})"></i>${k}</span>`).join('')}
+    </div>
+    ${ordered.map(g=>{
+      const sid = g.stage.id;
+      const draft = g.items.some(i=>i.stage_source==='proposed_draft') && sid!=='UNMAPPED';
+      const done = g.items.filter(it=>effectiveStatus(it, it.level==='Project Level'?S.currentProject:null)==='Compliant / Completed').length;
+      const pct = g.items.length? Math.round(done/g.items.length*100):0;
+      return `
+      <div class="stage-block ${sid==='S1'?'open':''}" data-stage="${esc(sid)}">
+        <div class="stage-head" data-toggle="${esc(sid)}">
+          <span class="stage-chevron">▶</span>
+          <h3>${esc(g.stage.name)} ${draft?'<span class="proposed-flag" style="margin-left:8px;">Proposed — needs approval</span>':''}</h3>
+          <div class="stage-progress"><div class="bar-track"><div class="bar-seg" style="width:${pct}%;background:var(--accent)"></div></div></div>
+          <div class="stage-count">${done}/${g.items.length} done</div>
+        </div>
+        <div class="stage-items">
+          <div class="item-row-header"><div>ID</div><div>Description</div><div>Authority</div><div>Owner</div><div>Next due</div><div>Status</div></div>
+          ${g.items.map(it=>{
+            const projCtx = it.level==='Project Level' ? S.currentProject : null;
+            const tr = getTracking(it, projCtx);
+            const st = effectiveStatus(it, projCtx);
+            const sdef = STATUS_DEFS[st]||STATUS_DEFS['Not Started'];
+            return `<div class="item-row" data-open="${esc(it.compliance_id)}">
+              <div class="idcell" data-lbl="ID">${esc(it.compliance_id)}</div>
+              <div class="desc" data-lbl="Description" title="${esc(it.brief_description)}">${esc(it.brief_description||'')}</div>
+              <div class="muted" data-lbl="Authority">${esc(it.authority_norm)}</div>
+              <div class="muted" data-lbl="Owner">${esc(it.owner)}</div>
+              <div class="muted mono" data-lbl="Next due">${tr.next_due_date?fmtDate(tr.next_due_date):'—'}</div>
+              <div data-lbl="Status"><span class="badge ${sdef.cls}"><span class="ic">${sdef.ic}</span>${st}</span></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+/* ============================= CALENDAR ============================= */
+function monthMatrix(year, month){
+  const first = new Date(year, month, 1);
+  const startDow = first.getDay();
+  const days = new Date(year, month+1, 0).getDate();
+  const cells = [];
+  for(let i=0;i<startDow;i++) cells.push(null);
+  for(let d=1; d<=days; d++) cells.push(d);
+  while(cells.length%7!==0) cells.push(null);
+  return cells;
+}
+function itemsByDueDate(){
+  const map = {}; const undated=[];
+  S.items.forEach(it=>{
+    const projCtx = it.level==='Project Level' ? S.currentProject : null;
+    const tr = getTracking(it, projCtx);
+    if(tr.next_due_date){
+      map[tr.next_due_date] = map[tr.next_due_date]||[];
+      map[tr.next_due_date].push({it, tr});
+    } else if(it.due_date_parse_status==='undated_by_nature' || it.due_date_parse_status==='due_date_to_be_set' || it.due_date_parse_status==='unparsed'){
+      undated.push({it, tr});
+    }
+  });
+  return {map, undated};
+}
+function renderCalendar(){
+  const y = S.calMonth.getFullYear(), m = S.calMonth.getMonth();
+  const cells = monthMatrix(y,m);
+  const {map, undated} = itemsByDueDate();
+  const todayStr = todayISO();
+  const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const monthLabel = S.calMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+
+  function dayCell(d){
+    if(d===null) return '<div class="cal-cell off"></div>';
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const entries = map[dateStr]||[];
+    const isToday = dateStr===todayStr;
+    const shown = entries.slice(0,3);
+    return `<div class="cal-cell ${isToday?'today':''}">
+      <div class="dnum">${d}</div>
+      ${shown.map(e=>{
+        const st = effectiveStatus(e.it, e.it.level==='Project Level'?S.currentProject:null);
+        const sdef = STATUS_DEFS[st]||STATUS_DEFS['Not Started'];
+        return `<div class="cal-chip badge ${sdef.cls}" data-open="${esc(e.it.compliance_id)}" title="${esc(e.it.compliance_id+' — '+e.it.brief_description)}">${esc(e.it.compliance_id)}</div>`;
+      }).join('')}
+      ${entries.length>3?`<div class="cal-more">+${entries.length-3} more</div>`:''}
+    </div>`;
+  }
+
+  return `
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button class="btn" id="calPrev">‹</button>
+      <h3 style="min-width:170px;">${monthLabel}</h3>
+      <button class="btn" id="calNext">›</button>
+      <button class="btn" id="calToday">Today</button>
+      <select class="pill" id="calFilterLevel"><option value="">All levels</option><option value="Entity Level">Entity Level</option><option value="Project Level">Project Level</option></select>
+      <button class="btn primary" id="icsExport" style="margin-left:auto;">Export .ics</button>
+    </div>
+    <div class="legend">${Object.entries(STATUS_DEFS).map(([k,v])=>`<span><i style="background:var(--${v.cls})"></i>${k}</span>`).join('')}</div>
+    <div class="cal-grid">
+      ${dow.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+      ${cells.map(dayCell).join('')}
+    </div>
+    <div class="undated-panel card">
+      <h3 style="margin-bottom:8px;">Event-based / Ongoing — no fixed date (${undated.length})</h3>
+      <div>${undated.slice(0,80).map(e=>`<span class="undated-chip" data-open="${esc(e.it.compliance_id)}">${esc(e.it.compliance_id)} · ${esc((e.it.brief_description||'').slice(0,40))}</span>`).join('')}</div>
+      ${undated.length>80?`<div class="muted" style="margin-top:6px;color:var(--text-muted)">+${undated.length-80} more — refine in the Master Register.</div>`:''}
+    </div>
+  `;
+}
+function buildICS(){
+  const {map} = itemsByDueDate();
+  let lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Compliance Tracker//EN'];
+  Object.keys(map).forEach(dateStr=>{
+    map[dateStr].forEach(({it})=>{
+      const dt = dateStr.replace(/-/g,'');
+      lines.push('BEGIN:VEVENT');
+      lines.push('UID:'+it.compliance_id+'-'+dateStr+'@compliance-tracker');
+      lines.push('DTSTART;VALUE=DATE:'+dt);
+      lines.push('SUMMARY:'+it.compliance_id+' — '+(it.brief_description||'').replace(/\n/g,' ').slice(0,120));
+      lines.push('DESCRIPTION:'+(it.action_required||'').replace(/\n/g,' ').slice(0,500).replace(/,/g,'\\,'));
+      lines.push('END:VEVENT');
+    });
+  });
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+/* ============================= REGISTER ============================= */
+const ALL_COLS = [
+  ['compliance_id','Compliance ID'],['department','Department'],['level','Level'],
+  ['brief_description','Brief Description'],['regulation','Regulation'],['reference_section','Reference'],
+  ['authority_norm','Authority'],['frequency_norm','Frequency'],['due_date_raw','Due Date (source)'],
+  ['owner','Owner'],['approver','Approver'],['status','Status'],
+];
+function renderRegister(){
+  return `
+    <div class="register-toolbar">
+      <input type="text" id="regSearch" placeholder="Search ID, description, regulation, authority…">
+      <select class="pill" id="regDept"><option value="">All departments</option>${[...new Set(S.items.map(i=>i.department))].map(d=>`<option>${esc(d)}</option>`).join('')}</select>
+      <select class="pill" id="regLevel"><option value="">All levels</option><option>Entity Level</option><option>Project Level</option></select>
+      <button class="btn primary" id="regExport">Export CSV</button>
+    </div>
+    <div class="col-chooser">${ALL_COLS.map(([k,label])=>`<label><input type="checkbox" data-col="${k}" ${S.registerCols.includes(k)?'checked':''}> ${label}</label>`).join('')}</div>
+    <div class="table-wrap"><table class="register" id="regTable">
+      <thead><tr>${S.registerCols.map(c=>`<th>${esc(ALL_COLS.find(x=>x[0]===c)[1])}</th>`).join('')}</tr></thead>
+      <tbody id="regBody"></tbody>
+    </table></div>
+    <div id="regCount" style="margin-top:8px; font-size:12px; color:var(--text-muted);"></div>
+  `;
+}
+function regRowValue(it, col){
+  if(col==='status') return effectiveStatus(it, it.level==='Project Level'?S.currentProject:null);
+  return it[col];
+}
+function refreshRegisterBody(){
+  const q = (document.getElementById('regSearch')?.value||'').toLowerCase();
+  const dept = document.getElementById('regDept')?.value||'';
+  const level = document.getElementById('regLevel')?.value||'';
+  let rows = S.items.filter(it=>{
+    if(dept && it.department!==dept) return false;
+    if(level && it.level!==level) return false;
+    if(q){
+      const hay = [it.compliance_id,it.department,it.brief_description,it.regulation,it.authority_norm,it.owner].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  document.getElementById('regBody').innerHTML = rows.map(it=>`<tr data-open="${esc(it.compliance_id)}">${S.registerCols.map(c=>`<td title="${esc(regRowValue(it,c))}">${esc(regRowValue(it,c))}</td>`).join('')}</tr>`).join('');
+  document.getElementById('regCount').textContent = `${rows.length} of ${S.items.length} items`;
+  window._regRows = rows;
+}
+
+/* ============================= PROJECTS ============================= */
+function renderProjects(){
+  const ids = Object.keys(S.projects);
+  return `
+    <div class="section-title">Projects</div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-bottom:10px;">Add project</h3>
+      <div class="field"><label>Project name</label><input id="npName" placeholder="e.g. Skyline Heights Phase 2"></div>
+      <div class="field"><label>MahaRERA registration no.</label><input id="npRera" placeholder="P5XXXX000XXXX"></div>
+      <div class="field"><label>Current construction stage (free text)</label><input id="npStage" placeholder="e.g. Plinth checking"></div>
+      <button class="btn primary" id="npSave" ${canEditTracking()?'':'disabled'}>Save project</button>
+    </div>
+    ${ids.length? ids.map(id=>`
+      <div class="card" style="margin-bottom:10px;">
+        <strong>${esc(S.projects[id].name)}</strong> <span class="mono" style="color:var(--text-muted)">(${esc(id)})</span><br>
+        <span style="color:var(--text-muted); font-size:12.5px;">RERA: ${esc(S.projects[id].rera_no||'—')} · Stage: ${esc(S.projects[id].current_stage||'—')}</span>
+      </div>`).join('') : '<div class="empty-state">No projects yet. Project-level items track against "Entity-level" until a project is added.</div>'}
+  `;
+}
+
+/* ============================= DATA QUALITY ============================= */
+function renderDQ(){
+  const unparsedDue = S.items.filter(i=>i.due_date_parse_status==='unparsed');
+  const toBeSet = S.items.filter(i=>i.due_date_parse_status==='due_date_to_be_set');
+  const noOwner = S.items.filter(i=>i.owner==='Unassigned');
+  const noApprover = S.items.filter(i=>i.approver==='Unassigned');
+  const unmapped = S.items.filter(i=>effectiveStageId(i)==='UNMAPPED');
+  const otherFreq = S.items.filter(i=>i.frequency_norm==='Other / Unparsed');
+  const brokenId = S.items.filter(i=>i.compliance_id_source_formula_broken);
+
+  function group(title, list, note){
+    return `<div class="dq-group"><h3>${esc(title)} <span class="mono" style="color:var(--text-muted); font-weight:400;">(${list.length})</span></h3>
+      ${note?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">${note}</div>`:''}
+      <div class="dq-list">${list.slice(0,40).map(it=>`<div class="dq-item" data-open="${esc(it.compliance_id)}"><span class="mono">${esc(it.compliance_id)}</span><span>${esc((it.brief_description||'').slice(0,70))}</span></div>`).join('')}
+      ${list.length>40?`<div class="dq-item" style="color:var(--text-muted)">+${list.length-40} more — see Master Register.</div>`:''}
+      </div></div>`;
+  }
+  return `
+    ${group('Compliance ID / Sr No formula broken in source (recomputed)', brokenId, 'The Excel\'s own Sr No formula breaks from row 19 onward (a `=#REF!+1` chain). IDs shown throughout this app are recomputed, not guessed — same logic as the sheet\'s formula, applied per department.')}
+    ${group('Due date unparsed (free text, not auto-converted)', unparsedDue, 'Open the item and set a concrete next due date manually.')}
+    ${group('Due date to be set (blank in source)', toBeSet)}
+    ${group('Owner unassigned', noOwner)}
+    ${group('Approver unassigned', noApprover)}
+    ${group('Unmapped to a process stage', unmapped, 'No stage definition exists in the source sheet for these items — only the Sanctioning sequence has one.')}
+    ${group('Frequency text not recognized by the normalizer', otherFreq)}
+  `;
+}
+
+/* ============================= DRAWER ============================= */
+let currentDrawerItem = null, auditUnsub = null;
+function openDrawer(complianceId){
+  const it = S.items.find(i=>i.compliance_id===complianceId);
+  if(!it) return;
+  currentDrawerItem = it;
+  const projCtx = it.level==='Project Level' ? S.currentProject : null;
+  const tr = getTracking(it, projCtx);
+  const editable = canEditTracking();
+  const stageOptions = S.stages.map(s=>`<option value="${s.id}" ${effectiveStageId(it)===s.id?'selected':''}>${esc(s.name)}</option>`).join('')+`<option value="UNMAPPED" ${effectiveStageId(it)==='UNMAPPED'?'selected':''}>Unmapped to Stage</option>`;
+
+  document.getElementById('drawer').innerHTML = `
+    <button class="drawer-close" id="drawerClose">✕</button>
+    <h3 class="mono" style="margin-bottom:2px;">${esc(it.compliance_id)}</h3>
+    <div style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">${esc(it.department)} · ${esc(it.level)}</div>
+
+    <div class="field"><label>Brief Description</label><div class="val">${esc(it.brief_description)}</div></div>
+    <div class="field"><label>Regulation / Reference</label><div class="val">${esc(it.regulation||'—')} ${it.reference_section?('— '+esc(it.reference_section)):''}</div></div>
+    <div class="field"><label>Action Required</label><div class="val">${esc(it.action_required||'—')}</div></div>
+    <div class="field"><label>Forms / Documents</label><div class="val">${esc(it.forms_documents||'—')}</div></div>
+    <div class="field"><label>Authority</label><div class="val">${esc(it.authority_norm)} <span style="color:var(--text-muted)">(source: ${esc(it.authority_raw||'blank')})</span></div></div>
+    <div class="field"><label>Frequency</label><div class="val">${esc(it.frequency_norm)} <span style="color:var(--text-muted)">(source: ${esc(it.frequency_raw||'blank')})</span></div></div>
+    <div class="field"><label>Due Date (source text)</label><div class="val">${esc(it.due_date_raw||'blank')}</div></div>
+    <div class="field"><label>Penalty / Implications</label><div class="val">${esc(it.penalty||'—')}</div></div>
+    <div class="field"><label>Owner / Approver (source)</label><div class="val">${esc(it.owner)} / ${esc(it.approver)}</div></div>
+    <div class="field"><label>Applicability / Trigger</label><div class="val">${esc(it.applicability||'—')}</div></div>
+
+    <div class="drawer-section">
+      <h4 style="margin-bottom:10px;">Process stage</h4>
+      ${it.level==='Sanctioning'||it.stage_source==='proposed_draft' ? '<div class="proposed-flag" style="margin-bottom:8px;">Proposed — needs compliance head approval</div>':''}
+      <select id="stageSelect" ${S.role==='admin'?'':'disabled'}>${stageOptions}</select>
+    </div>
+
+    <div class="drawer-section">
+      <h4 style="margin-bottom:10px;">Tracking${it.level==='Project Level'?' — '+esc((S.projects[S.currentProject]&&S.projects[S.currentProject].name)||S.currentProject):''}</h4>
+      ${!editable?'<div class="readonly-note">Your current role (Read-only) cannot change status.</div>':''}
+      <div class="field"><label>Status</label>
+        <select id="statusSelect" ${editable?'':'disabled'}>${STATUS_LIST.map(s=>`<option value="${s}" ${tr.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Next due date</label><input type="date" id="nextDueInput" value="${tr.next_due_date||''}" ${editable?'':'disabled'}></div>
+      <div class="field"><label>Remarks</label><textarea id="remarksInput" rows="2" ${editable?'':'disabled'}>${esc(tr.remarks||'')}</textarea></div>
+      <div class="field"><label>Evidence / document link</label><input type="text" id="evidenceInput" value="${esc(tr.evidence_link||'')}" placeholder="https://…" ${editable?'':'disabled'}></div>
+      <div class="field"><label>Updated by</label><input type="text" id="whoInput" value="${esc(tr.last_updated_by || (meProfile&&meProfile.name) || '')}" placeholder="Your name" ${editable?'':'disabled'}></div>
+      <button class="btn primary" id="saveTrackingBtn" ${editable?'':'disabled'}>Save status</button>
+      ${tr.updated_at?`<div style="font-size:11px;color:var(--text-muted); margin-top:6px;">Last updated ${new Date(tr.updated_at).toLocaleString()}</div>`:''}
+    </div>
+
+    <div class="drawer-section">
+      <h4 style="margin-bottom:8px;">Audit history</h4>
+      <div id="auditList" style="color:var(--text-muted); font-size:12px;">Loading…</div>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+  document.getElementById('drawerClose').onclick = closeDrawer;
+  document.getElementById('stageSelect').onchange = e=>saveStageOverride(it.compliance_id, e.target.value);
+  const saveBtn = document.getElementById('saveTrackingBtn');
+  if(saveBtn) saveBtn.onclick = ()=>{
+    saveTracking(it, projCtx, {
+      status: document.getElementById('statusSelect').value,
+      next_due_date: document.getElementById('nextDueInput').value || null,
+      remarks: document.getElementById('remarksInput').value,
+      evidence_link: document.getElementById('evidenceInput').value,
+    }).then(()=>{ render(); if(S.view!=='dashboard') render(); });
+  };
+
+  if(auditUnsub) auditUnsub();
+  auditUnsub = subscribeAudit(it.compliance_id, projCtx, entries=>{
+    const el = document.getElementById('auditList');
+    if(!el) return;
+    el.innerHTML = entries.length ? entries.map(a=>`<div class="audit-entry"><b>${esc(a.who)}</b> — ${esc(a.old_status)} → <b>${esc(a.new_status)}</b><br>${new Date(a.at).toLocaleString()} ${a.remark?('· '+esc(a.remark)):''}</div>`).join('') : 'No status changes recorded yet.';
+  });
+}
+function closeDrawer(){
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+  if(auditUnsub){ auditUnsub(); auditUnsub=null; }
+}
+
+/* ============================= EVENT WIRING ============================= */
+function attachViewHandlers(){
+  document.querySelectorAll('[data-open]').forEach(el=>{
+    el.addEventListener('click', ()=>openDrawer(el.getAttribute('data-open')));
+  });
+  document.querySelectorAll('[data-toggle]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const block = el.closest('.stage-block');
+      block.classList.toggle('open');
+    });
+  });
+  if(S.view==='calendar'){
+    document.getElementById('calPrev').onclick = ()=>{ S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth()-1, 1); render(); };
+    document.getElementById('calNext').onclick = ()=>{ S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth()+1, 1); render(); };
+    document.getElementById('calToday').onclick = ()=>{ S.calMonth = new Date(); render(); };
+    document.getElementById('icsExport').onclick = async ()=>{
+      const ics = buildICS();
+      if(downloads){ try{ await downloads.save({filename:'compliance-calendar.ics', data: ics}); }catch(e){ toast('Download was not completed.'); } }
+      else toast('Downloads are unavailable in this preview context.');
+    };
+  }
+  if(S.view==='register'){
+    refreshRegisterBody();
+    ['regSearch','regDept','regLevel'].forEach(id=>document.getElementById(id).addEventListener('input', refreshRegisterBody));
+    document.querySelectorAll('[data-col]').forEach(cb=>cb.addEventListener('change', ()=>{
+      const col = cb.getAttribute('data-col');
+      if(cb.checked){ if(!S.registerCols.includes(col)) S.registerCols.push(col); }
+      else S.registerCols = S.registerCols.filter(c=>c!==col);
+      render();
+    }));
+    document.getElementById('regExport').onclick = async ()=>{
+      const rows = window._regRows||[];
+      const header = S.registerCols.map(c=>ALL_COLS.find(x=>x[0]===c)[1]);
+      const csv = [header.join(',')].concat(rows.map(it=>S.registerCols.map(c=>{
+        const v = String(regRowValue(it,c)||'').replace(/"/g,'""');
+        return `"${v}"`;
+      }).join(','))).join('\r\n');
+      if(downloads){ try{ await downloads.save({filename:'compliance-register.csv', data: csv}); }catch(e){ toast('Download was not completed.'); } }
+      else toast('Downloads are unavailable in this preview context.');
+    };
+  }
+  if(S.view==='projects'){
+    const btn = document.getElementById('npSave');
+    if(btn) btn.onclick = ()=>{
+      const name = document.getElementById('npName').value.trim();
+      if(!name){ toast('Enter a project name.'); return; }
+      const id = 'proj_'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40)+'_'+Date.now().toString(36);
+      saveProject(id, {name, rera_no: document.getElementById('npRera').value.trim(), current_stage: document.getElementById('npStage').value.trim(), created_at: new Date().toISOString()});
+    };
+  }
+}
+
+/* ============================= BOOT ============================= */
+document.getElementById('overlay').addEventListener('click', closeDrawer);
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>switchView(t.dataset.view)));
+document.getElementById('projectSelect').addEventListener('change', e=>{ S.currentProject = e.target.value; render(); });
+document.getElementById('roleSelect').addEventListener('change', e=>{ S.role = e.target.value; render(); });
+
+(async function boot(){
+  await loadData();
+  populateProjectSelect();
+  switchView('dashboard');
+  await initCapabilities();
+  render();
+})();
+</script>
