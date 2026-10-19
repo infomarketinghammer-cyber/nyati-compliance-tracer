@@ -1,7 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { MongoClient } from 'mongodb';
+import { MongoClient, GridFSBucket, ObjectId } from 'mongodb';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -38,8 +38,11 @@ const WRITE_ROLES = {
   tracking: EDITORS,
   projects: EDITORS,
   audit: EDITORS,
-  stage_overrides: ['admin']
+  stage_overrides: ['admin'],
+  documents: [] // read-only through /api; rows are created and deleted only by the /files routes
 };
+const MAX_UPLOAD = 15 * 1024 * 1024;
+const UPLOAD_EXT = new Set(['.pdf', '.doc', '.docx']);
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const MIN_PASSWORD = 10;
 
@@ -49,6 +52,8 @@ await client.connect();
 const db = client.db(MONGODB_DB);
 const users = db.collection('users');
 await db.collection('audit').createIndex({ key: 1, at: -1 });
+await db.collection('documents').createIndex({ key: 1, uploaded_at: -1 });
+const bucket = new GridFSBucket(db, { bucketName: 'uploads' });
 console.log(`Connected to MongoDB database "${MONGODB_DB}"`);
 
 /* ----------------------------- passwords & sessions ----------------------------- */
@@ -158,6 +163,11 @@ app.use((req, res, next) => {
     let ok = false;
     try { ok = new URL(origin).host === req.headers.host; } catch { /* bad origin */ }
     if (!ok) return res.status(403).json({ error: 'cross-origin request blocked' });
+  }
+  // File upload/delete routes carry binary bodies; a custom header (which cross-site forms can't send) stands in for the JSON check.
+  if (req.path.startsWith('/files')) {
+    if (req.headers['x-requested-with'] !== 'fetch') return res.status(415).json({ error: 'bad request' });
+    return next();
   }
   if (req.body === undefined || !req.is('json')) return res.status(415).json({ error: 'JSON body required' });
   next();
@@ -331,6 +341,56 @@ app.post('/api/:col', guard, canWrite, async (req, res) => {
     const r = await db.collection(req.params.col).insertOne(stamp(req.params.col, data, req.user));
     res.json({ ok: true, id: String(r.insertedId) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'db error' }); }
+});
+
+/* ----------------------------- document files (GridFS + "documents" collection) ----------------------------- */
+const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+app.post('/files', requireRole(...EDITORS), express.raw({ type: () => true, limit: MAX_UPLOAD }), async (req, res) => {
+  try {
+    const { key, compliance_id, project_id, doc_name, file_name } = req.query;
+    const meta = {
+      key: str(key, 200), compliance_id: str(compliance_id, 100), project_id: str(project_id, 100) || null,
+      doc_name: str(doc_name, 150), file_name: path.basename(str(file_name, 200).replace(/\\/g, '/'))
+    };
+    if (!validId(meta.key) || !validId(meta.compliance_id) || !meta.doc_name || !meta.file_name) return res.status(400).json({ error: 'Missing document details.' });
+    if (!UPLOAD_EXT.has(path.extname(meta.file_name).toLowerCase())) return res.status(400).json({ error: 'This file type is not allowed.' });
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'The file is empty.' });
+    const up = bucket.openUploadStream(meta.file_name, { metadata: { key: meta.key } });
+    await new Promise((ok, fail) => { up.on('finish', ok).on('error', fail); up.end(req.body); });
+    const doc = {
+      ...meta, file_id: String(up.id), size: req.body.length,
+      uploaded_by: req.user.name, uploaded_at: new Date().toISOString()
+    };
+    const r = await db.collection('documents').insertOne(doc);
+    res.json({ ok: true, id: String(r.insertedId) });
+  } catch (e) {
+    if (e.type === 'entity.too.large') return res.status(413).json({ error: 'File is larger than 15 MB.' });
+    console.error(e); res.status(500).json({ error: 'upload failed' });
+  }
+});
+
+app.get('/files/:fileId', async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.fileId)) return res.status(404).json({ error: 'not found' });
+    const doc = await db.collection('documents').findOne({ file_id: req.params.fileId });
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(doc.file_name)}`);
+    bucket.openDownloadStream(new ObjectId(doc.file_id)).on('error', () => res.destroy()).pipe(res);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'download failed' }); }
+});
+
+// :id here is the "documents" row id.
+app.delete('/files/:id', requireRole(...EDITORS), async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'not found' });
+    const doc = await db.collection('documents').findOneAndDelete({ _id: new ObjectId(req.params.id) });
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    await bucket.delete(new ObjectId(doc.file_id)).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'delete failed' }); }
 });
 
 /* ----------------------------- static app (signed-in only) ----------------------------- */

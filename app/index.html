@@ -49,29 +49,39 @@ input,select,textarea{font-family:inherit; font-size:13px;}
 ::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
 
 /* ---------- App shell ---------- */
-#app{display:flex; flex-direction:column; min-height:100vh;}
-.topbar{
-  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
-  background:var(--surface); border-bottom:1px solid var(--border);
-  padding:10px max(16px, env(safe-area-inset-left,0px)) 10px max(16px, env(safe-area-inset-left,0px));
-  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+#app{display:flex; min-height:100vh;}
+.sidebar{
+  position:sticky; top:0; align-self:flex-start; height:100vh; width:220px; flex-shrink:0; z-index:30;
+  background:var(--surface); border-right:1px solid var(--border);
+  padding:16px 12px; display:flex; flex-direction:column; gap:16px; overflow-y:auto;
 }
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:31;background:var(--surface);}
-.brand{display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; white-space:nowrap;}
+.brand{display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; padding:0 6px;}
 .brand .logo{height:28px; width:auto; display:block; object-fit:contain;}
-.tabs{display:flex; gap:4px; flex-wrap:wrap; flex:1;}
+.tabs{display:flex; flex-direction:column; gap:2px; flex:1;}
 .tab{
-  padding:7px 12px; border-radius:8px; border:1px solid transparent; background:transparent;
-  color:var(--text-muted); font-size:13px; font-weight:600;
+  padding:9px 12px; border-radius:8px; border:1px solid transparent; background:transparent;
+  color:var(--text-muted); font-size:13px; font-weight:600; text-align:left; width:100%;
 }
 .tab.active{background:var(--accent); color:var(--accent-ink);}
 .tab:not(.active):hover{background:var(--surface-2); color:var(--text);}
-.topbar-right{display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;}
-select.pill, .pill-btn{
+.content{flex:1; min-width:0; display:flex; flex-direction:column;}
+.topbar{
+  position:sticky; top:0; z-index:20; background:var(--surface); border-bottom:1px solid var(--border);
+  padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;
+}
+.topbar-right{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+select.pill, .pill-btn, .pill{
   padding:6px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2);
   color:var(--text); font-size:12.5px;
 }
-main{flex:1; padding:18px max(16px, env(safe-area-inset-left,0px)) 40px max(16px, env(safe-area-inset-left,0px)); max-width:1280px; margin:0 auto; width:100%;}
+main{flex:1; padding:18px 16px 40px; max-width:1280px; margin:0 auto; width:100%;}
+@media (max-width:760px){
+  #app{flex-direction:column;}
+  .sidebar{position:static; height:auto; width:100%; border-right:none; border-bottom:1px solid var(--border); padding:10px 12px; gap:8px;}
+  .tabs{flex-direction:row; flex-wrap:wrap;}
+  .tab{width:auto;}
+  .topbar{position:static; justify-content:flex-start;}
+}
 
 .view{display:none;}
 .view.active{display:block;}
@@ -167,12 +177,49 @@ table.register tr:hover td{background:var(--surface-2); cursor:pointer;}
 .overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; display:none;}
 .overlay.show{display:block;}
 .drawer{
-  position:fixed; top:0; right:0; bottom:0; width:min(480px,100vw); background:var(--surface); z-index:41;
-  transform:translateX(100%); transition:transform .2s ease; overflow-y:auto; border-left:1px solid var(--border);
-  padding:max(16px,env(safe-area-inset-top,16px)) max(16px, env(safe-area-inset-right,0px)) 30px 16px;
+  position:fixed; top:50%; left:50%; width:min(820px,94vw); max-height:90vh; background:var(--surface); z-index:41;
+  transform:translate(-50%,-48%) scale(.98); opacity:0; visibility:hidden; transition:opacity .15s ease, transform .15s ease, visibility .15s;
+  overflow-y:auto; border:1px solid var(--border); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.35);
+  padding:0;
 }
-.drawer.show{transform:translateX(0);}
+.modal-head{position:sticky; top:0; z-index:2; display:flex; gap:12px; align-items:flex-start; padding:18px 22px 14px; background:var(--surface); border-bottom:1px solid var(--border);}
+.modal-head .drawer-close{position:static; flex-shrink:0;}
+.modal-badges{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px;}
+.modal-id{font-weight:700; font-size:13px; background:var(--accent); color:var(--accent-ink); padding:3px 9px; border-radius:6px;}
+.modal-title{font-size:16px; line-height:1.4; font-weight:600;}
+.modal-body{padding:18px 22px 26px; background:var(--bg); display:flex; flex-direction:column; gap:14px;}
+.modal-grid{display:grid; grid-template-columns:1.25fr 1fr; gap:14px; align-items:start;}
+@media (max-width:760px){.modal-grid{grid-template-columns:1fr;}}
+.modal-col{display:flex; flex-direction:column; gap:14px; min-width:0;}
+.panel{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+.panel>h4{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 10px; font-family:var(--font-display);}
+.prose{font-size:13.5px; line-height:1.6; white-space:pre-wrap;}
+.prose-meta{margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); font-size:12.5px; color:var(--text-muted);}
+.prose-meta b{color:var(--text);}
+.facts{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+@media (max-width:520px){.facts{grid-template-columns:1fr;}}
+.fact{background:var(--surface-2); border-radius:9px; padding:9px 11px; min-width:0;}
+.fact-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:3px; font-weight:600;}
+.fact-val{font-size:13px; font-weight:600; overflow-wrap:anywhere;}
+.fact-val select{font-weight:500; font-size:12px; padding:5px 6px; width:100%; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
+.fact-sub{font-size:11px; color:var(--text-muted); margin-top:2px; overflow-wrap:anywhere;}
+.drawer.show{transform:translate(-50%,-50%) scale(1); opacity:1; visibility:visible;}
 .drawer-close{position:absolute; top:14px; right:14px; background:var(--surface-2); border:none; border-radius:8px; width:30px; height:30px; font-size:16px; color:var(--text);}
+.detail-grid{display:grid; grid-template-columns:1fr 1fr; gap:0 22px;}
+.detail-grid .wide{grid-column:1 / -1;}
+@media (max-width:640px){.detail-grid{grid-template-columns:1fr;}}
+.doc-check{display:flex; align-items:center; gap:8px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--border);}
+.doc-check:last-child{border-bottom:none;}
+.doc-check .st{width:18px; text-align:center; font-weight:700;}
+.doc-check.done .st{color:var(--ok);}
+.doc-check.pending .st{color:var(--text-muted);}
+.doc-upload{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px;}
+.doc-upload select{flex:2 1 220px; width:auto;}
+.doc-upload input[type=file]{flex:2 1 200px; width:auto;}
+.doc-file{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px;}
+.doc-file:last-child{border-bottom:none;}
+.doc-file .meta{color:var(--text-muted); font-size:11.5px;}
+.btn.sm{padding:4px 10px; font-size:11.5px;}
 .field{margin-bottom:12px;}
 .field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin-bottom:4px;}
 .field .val{font-size:13px; white-space:pre-wrap;}
@@ -197,9 +244,9 @@ table.register tr:hover td{background:var(--surface-2); cursor:pointer;}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 
 <div id="app">
-  <div class="topbar">
+  <aside class="sidebar">
     <div class="brand"><img class="logo" src="images/nyati%20logo.avif" alt="Nyati">Compliance Tracker</div>
-    <div class="tabs" id="tabs">
+    <nav class="tabs" id="tabs">
       <button class="tab" data-view="dashboard">Dashboard</button>
       <button class="tab" data-view="stages">Stages</button>
       <button class="tab" data-view="calendar">Calendar</button>
@@ -207,15 +254,19 @@ table.register tr:hover td{background:var(--surface-2); cursor:pointer;}
       <button class="tab" data-view="projects">Projects</button>
       <button class="tab" data-view="dq">Data Quality</button>
       <button class="tab" data-view="users" id="usersTab" hidden>Users</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <div class="topbar-right">
+        <select class="pill" id="projectSelect"></select>
+        <span class="pill" id="userChip" style="cursor:default;"></span>
+        <button class="pill" id="logoutBtn" type="button">Sign out</button>
+      </div>
     </div>
-    <div class="topbar-right">
-      <select class="pill" id="projectSelect"></select>
-      <span class="pill" id="userChip" style="cursor:default;"></span>
-      <button class="pill" id="pwBtn" type="button">Password</button>
-      <button class="pill" id="logoutBtn" type="button">Sign out</button>
-    </div>
+    <main id="main"></main>
   </div>
-  <main id="main"></main>
 </div>
 
 <div class="overlay" id="overlay"></div>
@@ -453,6 +504,7 @@ function render(){
     case 'projects': html = renderProjects(); break;
     case 'dq': html = renderDQ(); break;
     case 'users': html = renderUsers(); break;
+    case 'settings': html = renderSettings(); break;
   }
   main.innerHTML = html;
   attachViewHandlers();
@@ -569,14 +621,13 @@ function renderStages(){
     </div>
     ${ordered.map(g=>{
       const sid = g.stage.id;
-      const draft = g.items.some(i=>i.stage_source==='proposed_draft') && sid!=='UNMAPPED';
       const done = g.items.filter(it=>effectiveStatus(it, it.level==='Project Level'?S.currentProject:null)==='Compliant / Completed').length;
       const pct = g.items.length? Math.round(done/g.items.length*100):0;
       return `
       <div class="stage-block ${sid==='S1'?'open':''}" data-stage="${esc(sid)}">
         <div class="stage-head" data-toggle="${esc(sid)}">
           <span class="stage-chevron">▶</span>
-          <h3>${esc(g.stage.name)} ${draft?'<span class="proposed-flag" style="margin-left:8px;">Proposed — needs approval</span>':''}</h3>
+          <h3>${esc(g.stage.name)}</h3>
           <div class="stage-progress"><div class="bar-track"><div class="bar-seg" style="width:${pct}%;background:var(--accent)"></div></div></div>
           <div class="stage-count">${done}/${g.items.length} done</div>
         </div>
@@ -785,39 +836,71 @@ function renderDQ(){
 }
 
 /* ============================= DRAWER ============================= */
-let currentDrawerItem = null, auditUnsub = null;
+let currentDrawerItem = null, auditUnsub = null, docSel = '';
 function openDrawer(complianceId){
   const it = S.items.find(i=>i.compliance_id===complianceId);
   if(!it) return;
   currentDrawerItem = it;
+  docSel = '';
   const projCtx = it.level==='Project Level' ? S.currentProject : null;
   const tr = getTracking(it, projCtx);
   const editable = canEditTracking();
   const stageOptions = S.stages.map(s=>`<option value="${s.id}" ${effectiveStageId(it)===s.id?'selected':''}>${esc(s.name)}</option>`).join('')+`<option value="UNMAPPED" ${effectiveStageId(it)==='UNMAPPED'?'selected':''}>Unmapped to Stage</option>`;
 
+  const st = STATUS_DEFS[effectiveStatus(it, projCtx)] || STATUS_DEFS['Not Started'];
+  const fact = (label, val, sub)=>`<div class="fact"><div class="fact-label">${label}</div><div class="fact-val">${val}</div>${sub?`<div class="fact-sub">${sub}</div>`:''}</div>`;
+  const srcNote = (norm, raw)=> raw && raw!==norm ? 'Source: '+esc(raw) : '';
+
   document.getElementById('drawer').innerHTML = `
-    <button class="drawer-close" id="drawerClose">✕</button>
-    <h3 class="mono" style="margin-bottom:2px;">${esc(it.compliance_id)}</h3>
-    <div style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">${esc(it.department)} · ${esc(it.level)}</div>
-
-    <div class="field"><label>Brief Description</label><div class="val">${esc(it.brief_description)}</div></div>
-    <div class="field"><label>Regulation / Reference</label><div class="val">${esc(it.regulation||'—')} ${it.reference_section?('— '+esc(it.reference_section)):''}</div></div>
-    <div class="field"><label>Action Required</label><div class="val">${esc(it.action_required||'—')}</div></div>
-    <div class="field"><label>Forms / Documents</label><div class="val">${esc(it.forms_documents||'—')}</div></div>
-    <div class="field"><label>Authority</label><div class="val">${esc(it.authority_norm)} <span style="color:var(--text-muted)">(source: ${esc(it.authority_raw||'blank')})</span></div></div>
-    <div class="field"><label>Frequency</label><div class="val">${esc(it.frequency_norm)} <span style="color:var(--text-muted)">(source: ${esc(it.frequency_raw||'blank')})</span></div></div>
-    <div class="field"><label>Due Date (source text)</label><div class="val">${esc(it.due_date_raw||'blank')}</div></div>
-    <div class="field"><label>Penalty / Implications</label><div class="val">${esc(it.penalty||'—')}</div></div>
-    <div class="field"><label>Owner / Approver (source)</label><div class="val">${esc(it.owner)} / ${esc(it.approver)}</div></div>
-    <div class="field"><label>Applicability / Trigger</label><div class="val">${esc(it.applicability||'—')}</div></div>
-
-    <div class="drawer-section">
-      <h4 style="margin-bottom:10px;">Process stage</h4>
-      ${it.level==='Sanctioning'||it.stage_source==='proposed_draft' ? '<div class="proposed-flag" style="margin-bottom:8px;">Proposed — needs compliance head approval</div>':''}
-      <select id="stageSelect" ${S.role==='admin'?'':'disabled'}>${stageOptions}</select>
+    <div class="modal-head">
+      <div style="min-width:0;flex:1;">
+        <div class="modal-badges">
+          <span class="mono modal-id">${esc(it.compliance_id)}</span>
+          <span class="badge neutral">${esc(it.department)}</span>
+          <span class="badge neutral">${esc(it.level)}</span>
+          <span class="badge ${st.cls}"><span class="ic">${st.ic}</span>${esc(effectiveStatus(it, projCtx))}</span>
+        </div>
+        <h3 class="modal-title">${esc(it.brief_description)}</h3>
+      </div>
+      <button class="drawer-close" id="drawerClose" aria-label="Close">✕</button>
     </div>
 
-    <div class="drawer-section">
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-col">
+          <section class="panel">
+            <h4>What needs to be done</h4>
+            <div class="prose">${esc(it.action_required||'—')}</div>
+            <div class="prose-meta"><b>Regulation:</b> ${esc(it.regulation||'—')}${it.reference_section?(' — '+esc(it.reference_section)):''}</div>
+          </section>
+
+          <section class="panel">
+            <h4>Key facts</h4>
+            <div class="facts">
+              ${fact('Authority', esc(it.authority_norm||'—'), srcNote(it.authority_norm, it.authority_raw))}
+              ${fact('Frequency', esc(it.frequency_norm||'—'), srcNote(it.frequency_norm, it.frequency_raw))}
+              ${fact('Due date', esc(it.due_date_raw||'Not specified'))}
+              ${fact('Owner', esc(it.owner||'—'))}
+              ${fact('Approver', esc(it.approver||'—'))}
+              ${fact('Process stage', `<select id="stageSelect" ${S.role==='admin'?'':'disabled'}>${stageOptions}</select>`)}
+            </div>
+          </section>
+
+          <section class="panel">
+            <h4>Penalty &amp; applicability</h4>
+            <div class="fact-label">Penalty / implications</div>
+            <div class="prose" style="margin-bottom:12px;">${esc(it.penalty||'—')}</div>
+            <div class="fact-label">Applicability / trigger</div>
+            <div class="prose">${esc(it.applicability||'—')}</div>
+          </section>
+        </div>
+
+        <div class="modal-col">
+    <section class="panel">
+      <h4>Documents</h4>
+      <div id="docsBox" style="color:var(--text-muted); font-size:12px;">Loading…</div>
+    </section>
+    <div class="panel" id="trackPanel" ${docSel?'':'hidden'}>
       <h4 style="margin-bottom:10px;">Tracking${it.level==='Project Level'?' — '+esc((S.projects[S.currentProject]&&S.projects[S.currentProject].name)||S.currentProject):''}</h4>
       ${!editable?'<div class="readonly-note">Your current role (Read-only) cannot change status.</div>':''}
       <div class="field"><label>Status</label>
@@ -825,15 +908,18 @@ function openDrawer(complianceId){
       </div>
       <div class="field"><label>Next due date</label><input type="date" id="nextDueInput" value="${tr.next_due_date||''}" ${editable?'':'disabled'}></div>
       <div class="field"><label>Remarks</label><textarea id="remarksInput" rows="2" ${editable?'':'disabled'}>${esc(tr.remarks||'')}</textarea></div>
-      <div class="field"><label>Evidence / document link</label><input type="text" id="evidenceInput" value="${esc(tr.evidence_link||'')}" placeholder="https://…" ${editable?'':'disabled'}></div>
+      ${tr.evidence_link?`<div class="field"><label>Earlier evidence link</label><div class="val"><a href="${esc(tr.evidence_link)}" target="_blank" rel="noopener noreferrer">${esc(tr.evidence_link)}</a></div></div>`:''}
       <div class="field"><label>Updated by</label><input type="text" id="whoInput" value="${esc(tr.last_updated_by || '')}" placeholder="Set automatically when you save" disabled></div>
       <button class="btn primary" id="saveTrackingBtn" ${editable?'':'disabled'}>Save status</button>
       ${tr.updated_at?`<div style="font-size:11px;color:var(--text-muted); margin-top:6px;">Last updated ${new Date(tr.updated_at).toLocaleString()}</div>`:''}
     </div>
+        </div>
+      </div>
 
-    <div class="drawer-section">
-      <h4 style="margin-bottom:8px;">Audit history</h4>
-      <div id="auditList" style="color:var(--text-muted); font-size:12px;">Loading…</div>
+      <section class="panel">
+        <h4>Audit history</h4>
+        <div id="auditList" style="color:var(--text-muted); font-size:12px;">Loading…</div>
+      </section>
     </div>
   `;
   document.getElementById('overlay').classList.add('show');
@@ -846,9 +932,10 @@ function openDrawer(complianceId){
       status: document.getElementById('statusSelect').value,
       next_due_date: document.getElementById('nextDueInput').value || null,
       remarks: document.getElementById('remarksInput').value,
-      evidence_link: document.getElementById('evidenceInput').value,
     }).then(()=>{ render(); if(S.view!=='dashboard') render(); });
   };
+
+  loadDocs(it, projCtx);
 
   if(auditUnsub) auditUnsub();
   auditUnsub = subscribeAudit(it.compliance_id, projCtx, entries=>{
@@ -857,7 +944,102 @@ function openDrawer(complianceId){
     el.innerHTML = entries.length ? entries.map(a=>`<div class="audit-entry"><b>${esc(a.who)}</b> — ${esc(a.old_status)} → <b>${esc(a.new_status)}</b><br>${new Date(a.at).toLocaleString()} ${a.remark?('· '+esc(a.remark)):''}</div>`).join('') : 'No status changes recorded yet.';
   });
 }
+/* ---------- Documents (uploaded files per required document) ---------- */
+const OTHER_DOC = '__other__';
+function requiredDocs(it){
+  const seen = new Set(), out = [];
+  String(it.forms_documents||'').split(/[\n;,]+/).forEach(p=>{
+    const t = p.replace(/^\s*(and|&)\s+/i,'').replace(/[.\s]+$/,'').trim();
+    if(t.length<3 || t.length>120 || seen.has(t.toLowerCase())) return;
+    seen.add(t.toLowerCase()); out.push(t);
+  });
+  return out;
+}
+function fmtSize(n){ return n>=1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+
+async function loadDocs(it, projCtx){
+  const key = trackingKey(it, projCtx);
+  let docs = [];
+  try{ docs = (await api('GET', '/api/documents?key='+encodeURIComponent(key))).map(d=>({id:d.id, ...d.data})); }
+  catch(e){ const b=document.getElementById('docsBox'); if(b) b.textContent='Could not load documents: '+e.message; return; }
+  if(currentDrawerItem !== it) return;
+  renderDocsBox(it, projCtx, docs);
+}
+
+function renderDocsBox(it, projCtx, docs){
+  const box = document.getElementById('docsBox');
+  if(!box) return;
+  const editable = canEditTracking();
+  const req = requiredDocs(it);
+  const byName = n=>docs.filter(d=>d.doc_name.toLowerCase()===n.toLowerCase());
+  const extra = docs.filter(d=>!req.some(n=>n.toLowerCase()===d.doc_name.toLowerCase()));
+  const doneCount = req.filter(n=>byName(n).length).length;
+  box.style.color = '';
+  box.innerHTML = `
+    ${req.length?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">${doneCount} of ${req.length} required documents uploaded</div>
+    <div>${req.map(n=>{ const c=byName(n).length; return `<div class="doc-check ${c?'done':'pending'}"><span class="st">${c?'✓':'○'}</span><span style="flex:1">${esc(n)}</span><span style="color:var(--text-muted);font-size:11.5px;">${c?c+' file'+(c>1?'s':''):'Not uploaded'}</span></div>`; }).join('')}</div>`
+    :'<div style="font-size:12px;color:var(--text-muted);">No specific documents are listed for this item. Use "Other document" to upload one.</div>'}
+    <div class="field" style="margin-top:12px;"><label>Select a document</label>
+      <select id="docSelect"><option value="">— Choose a document —</option>${req.map(n=>`<option value="${esc(n)}" ${docSel===n?'selected':''}>${esc(n)}</option>`).join('')}<option value="${OTHER_DOC}" ${docSel===OTHER_DOC?'selected':''}>Other document…</option></select>
+    </div>
+    ${editable?`<div id="docUploadRow" ${docSel?'':'hidden'}>
+      <input type="text" id="docOther" placeholder="Document name" style="margin-bottom:8px;" ${docSel===OTHER_DOC?'':'hidden'}>
+      <div class="doc-upload" style="margin-top:0;">
+        <input type="file" id="docFile" accept=".pdf,.doc,.docx">
+        <button class="btn primary" id="docUploadBtn" type="button">Upload</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">PDF or Word (.doc, .docx) · max 15 MB</div>
+    </div>`:'<div class="readonly-note">Your current role (Read-only) cannot upload documents.</div>'}
+    <div id="trackHint" class="prose-meta" style="margin-top:12px;" ${docSel?'hidden':''}>Select a document above to upload it and update the tracking status.</div>
+    <div style="margin-top:14px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-muted);margin-bottom:4px;">Uploaded files (${docs.length})</div>
+      ${docs.length ? docs.slice().sort((a,b)=>b.uploaded_at.localeCompare(a.uploaded_at)).map(d=>`<div class="doc-file">
+        <div style="min-width:0"><div><b>${esc(d.doc_name)}</b></div><div class="meta">${esc(d.file_name)} · ${fmtSize(d.size)} · ${esc(d.uploaded_by)} · ${new Date(d.uploaded_at).toLocaleString()}</div></div>
+        <div style="white-space:nowrap"><a class="btn sm" href="/files/${esc(d.file_id)}" style="text-decoration:none;display:inline-block;">Download</a>
+        ${editable?`<button class="btn sm" data-docdel="${esc(d.id)}" type="button">Delete</button>`:''}</div></div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">Nothing uploaded yet.</div>'}
+    </div>`;
+  const sel = document.getElementById('docSelect');
+  const other = document.getElementById('docOther');
+  sel.onchange = ()=>{
+    docSel = sel.value;
+    document.getElementById('trackPanel').hidden = !docSel;
+    document.getElementById('trackHint').hidden = !!docSel;
+    const row = document.getElementById('docUploadRow');
+    if(row){ row.hidden = !docSel; other.hidden = docSel!==OTHER_DOC; }
+  };
+  if(editable){
+    document.getElementById('docUploadBtn').onclick = async ()=>{
+      const file = document.getElementById('docFile').files[0];
+      const name = sel.value===OTHER_DOC ? other.value.trim() : sel.value;
+      if(!name){ toast(sel.value===OTHER_DOC ? 'Enter a document name.' : 'Select a document.'); return; }
+      if(!file){ toast('Choose a file to upload.'); return; }
+      if(file.size > 15*1024*1024){ toast('File is larger than 15 MB.'); return; }
+      const btn = document.getElementById('docUploadBtn'); btn.disabled = true; btn.textContent = 'Uploading…';
+      try{
+        const q = new URLSearchParams({key: trackingKey(it, projCtx), compliance_id: it.compliance_id, project_id: projCtx||'', doc_name: name, file_name: file.name});
+        const r = await fetch('/files?'+q, {method:'POST', headers:{'Content-Type':'application/octet-stream','X-Requested-With':'fetch'}, body:file});
+        if(r.status===401){ location.href='/login.html'; return; }
+        const j = await r.json().catch(()=>({}));
+        if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+        toast('Document uploaded.');
+      }catch(e){ toast('Upload failed: '+e.message); }
+      loadDocs(it, projCtx);
+    };
+  }
+  box.querySelectorAll('[data-docdel]').forEach(b=>b.onclick = async ()=>{
+    if(!window.confirm('Delete this uploaded file?')) return;
+    try{
+      const r = await fetch('/files/'+encodeURIComponent(b.dataset.docdel), {method:'DELETE', headers:{'X-Requested-With':'fetch'}});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+      toast('Deleted.');
+    }catch(e){ toast('Delete failed: '+e.message); }
+    loadDocs(it, projCtx);
+  });
+}
+
 function closeDrawer(){
+  currentDrawerItem = null;
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('drawer').classList.remove('show');
   if(auditUnsub){ auditUnsub(); auditUnsub=null; }
@@ -903,6 +1085,7 @@ function attachViewHandlers(){
     };
   }
   if(S.view==='users') attachUserHandlers();
+  if(S.view==='settings') attachSettingsHandlers();
   if(S.view==='projects'){
     const btn = document.getElementById('npSave');
     if(btn) btn.onclick = ()=>{
@@ -977,23 +1160,28 @@ function attachUserHandlers(){
   };
 }
 
-function openPasswordModal(){
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px;';
-  wrap.innerHTML = `<form class="card" style="width:100%;max-width:340px;">
-    <h3 style="margin-bottom:10px;">Change password</h3>
-    <div class="field"><label>Current password</label><input type="password" id="pwCur" autocomplete="current-password" required></div>
-    <div class="field"><label>New password (min 10 characters)</label><input type="password" id="pwNew" autocomplete="new-password" required minlength="10"></div>
-    <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" id="pwCancel">Cancel</button></div>
-  </form>`;
-  document.body.appendChild(wrap);
-  const close = ()=>wrap.remove();
-  wrap.querySelector('#pwCancel').onclick = close;
-  wrap.addEventListener('click', e=>{ if(e.target===wrap) close(); });
-  wrap.querySelector('form').addEventListener('submit', async e=>{
+function renderSettings(){
+  return `
+    <div class="section-title">Settings</div>
+    <div class="card" style="max-width:420px;">
+      <h3 style="margin-bottom:4px;">Change password</h3>
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Signed in as ${esc(ME.name)} (${esc(ME.email)})</div>
+      <form id="pwForm">
+        <div class="field"><label>Current password</label><input type="password" id="pwCur" autocomplete="current-password" required></div>
+        <div class="field"><label>New password (min 10 characters)</label><input type="password" id="pwNew" autocomplete="new-password" required minlength="10"></div>
+        <button class="btn primary" type="submit" style="margin-top:12px;">Change password</button>
+      </form>
+    </div>`;
+}
+
+function attachSettingsHandlers(){
+  const form = document.getElementById('pwForm');
+  form.addEventListener('submit', async e=>{
     e.preventDefault();
-    try{ await api('POST', '/auth/password', {current: wrap.querySelector('#pwCur').value, next: wrap.querySelector('#pwNew').value}); close(); toast('Password changed.'); }
-    catch(err){ toast(err.message); }
+    try{
+      await api('POST', '/auth/password', {current: document.getElementById('pwCur').value, next: document.getElementById('pwNew').value});
+      form.reset(); toast('Password changed.');
+    }catch(err){ toast(err.message); }
   });
 }
 
@@ -1001,7 +1189,6 @@ function openPasswordModal(){
 document.getElementById('overlay').addEventListener('click', closeDrawer);
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>switchView(t.dataset.view)));
 document.getElementById('projectSelect').addEventListener('change', e=>{ S.currentProject = e.target.value; render(); });
-document.getElementById('pwBtn').addEventListener('click', openPasswordModal);
 document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   try{ await fetch('/auth/logout', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }catch(e){}
   location.href = '/login.html';
