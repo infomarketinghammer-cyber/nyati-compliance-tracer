@@ -845,7 +845,8 @@ function openDrawer(complianceId){
   const projCtx = it.level==='Project Level' ? S.currentProject : null;
   const tr = getTracking(it, projCtx);
   const editable = canEditTracking();
-  const stageOptions = S.stages.map(s=>`<option value="${s.id}" ${effectiveStageId(it)===s.id?'selected':''}>${esc(s.name)}</option>`).join('')+`<option value="UNMAPPED" ${effectiveStageId(it)==='UNMAPPED'?'selected':''}>Unmapped to Stage</option>`;
+  const curStage = S.stages.find(s=>s.id===effectiveStageId(it));
+  const currentStageName = curStage ? curStage.name : 'Unmapped to Stage';
 
   const st = STATUS_DEFS[effectiveStatus(it, projCtx)] || STATUS_DEFS['Not Started'];
   const fact = (label, val, sub)=>`<div class="fact"><div class="fact-label">${label}</div><div class="fact-val">${val}</div>${sub?`<div class="fact-sub">${sub}</div>`:''}</div>`;
@@ -882,7 +883,7 @@ function openDrawer(complianceId){
               ${fact('Due date', esc(it.due_date_raw||'Not specified'))}
               ${fact('Owner', esc(it.owner||'—'))}
               ${fact('Approver', esc(it.approver||'—'))}
-              ${fact('Process stage', `<select id="stageSelect" ${S.role==='admin'?'':'disabled'}>${stageOptions}</select>`)}
+              ${fact('Process stage', esc(currentStageName))}
             </div>
           </section>
 
@@ -925,7 +926,6 @@ function openDrawer(complianceId){
   document.getElementById('overlay').classList.add('show');
   document.getElementById('drawer').classList.add('show');
   document.getElementById('drawerClose').onclick = closeDrawer;
-  document.getElementById('stageSelect').onchange = e=>saveStageOverride(it.compliance_id, e.target.value);
   const saveBtn = document.getElementById('saveTrackingBtn');
   if(saveBtn) saveBtn.onclick = ()=>{
     saveTracking(it, projCtx, {
